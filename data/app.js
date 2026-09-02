@@ -1091,6 +1091,7 @@ function openTypeIn(out, rng) {
 function wire() {
   wireTypeIn();
 
+  wireScrub();
   $('bt-log-rec').onclick = logToggleRec;
   $('bt-log-save').onclick = logSave;
   $('bt-log-open').onclick = () => $('log-file').click();
@@ -1214,6 +1215,7 @@ const LOG = {
   rows: [],
   head: null,          // config e escalas no inicio da gravacao
   open: null,          // log carregado: { head, rows }
+  dur: 30,             // segundos da janela; 0 = ate o usuario parar
 };
 
 function logRecord(m) {
@@ -1246,6 +1248,14 @@ function logRecord(m) {
     dyn: m.dyn || [], att: m.att || null,
     spec,
   });
+  // janela fechada: para sozinho quando completa o tempo escolhido, para o
+  // usuario nao ter que cronometrar nem lembrar de apertar parar
+  if (LOG.dur > 0 && LOG.rows[LOG.rows.length - 1].t >= LOG.dur) {
+    logToggleRec();
+    $('log-stat').textContent =
+      'janela de ' + fmtDur(LOG.dur) + ' completa · ' + LOG.rows.length + ' amostras';
+    return;
+  }
   logStat();
 }
 
@@ -1256,8 +1266,9 @@ function logStat() {
     // estimativa: serializar tudo a cada segundo so para medir sairia caro.
     // 3350 B/linha com espectro de 512 bins, 330 B sem - medido, nao chutado.
     const mb = (n * (LOG.rows[0] && LOG.rows[0].spec ? 3350 : 330)) / 1048576;
-    $('log-stat').textContent =
-      'gravando  ' + fmtDur(seg) + '  ·  ' + n + ' amostras  ·  ~' + mb.toFixed(1) + ' MB';
+    const alvo = LOG.dur > 0 ? ' / ' + fmtDur(LOG.dur) : '';
+    $('log-stat').textContent = 'gravando  ' + fmtDur(seg) + alvo +
+      '  ·  ' + n + ' amostras  ·  ~' + mb.toFixed(1) + ' MB';
   } else if (n) {
     $('log-stat').textContent = n + ' amostras gravadas (' + fmtDur(LOG.rows[n - 1].t) + ')';
   } else {
@@ -1273,8 +1284,12 @@ const fmtDur = (s) => {
 
 function logToggleRec() {
   LOG.rec = !LOG.rec;
-  if (LOG.rec) { LOG.rows = []; LOG.head = null; }
-  $('bt-log-rec').textContent = LOG.rec ? 'Parar gravação' : 'Gravar log';
+  if (LOG.rec) {
+    LOG.rows = []; LOG.head = null;
+    LOG.dur = +$('log-dur').value || 0;
+    if (LOG.open) logClose();      // gravar e reproduzir ao mesmo tempo confunde
+  }
+  $('bt-log-rec').textContent = LOG.rec ? 'Parar gravação' : 'Iniciar log';
   $('bt-log-rec').classList.toggle('rec', LOG.rec);
   logStat();
 }
@@ -1309,6 +1324,7 @@ function logOpen(doc, nome) {
   if (LOG.rec) logToggleRec();
 
   $('logbar').hidden = false;
+  $('cv-raw').classList.add('scrub');
   $('log-name').textContent = nome + '  ·  ' + doc.rows.length + ' amostras';
   $('log-pos').max = doc.rows.length - 1;
   $('log-pos').value = 0;
@@ -1331,6 +1347,7 @@ function logOpen(doc, nome) {
 function logClose() {
   LOG.open = null;
   $('logbar').hidden = true;
+  $('cv-raw').classList.remove('scrub');
   $('raw-title').innerHTML = 'Leitura da IMU <small id="raw-span"></small>';
   $('raw-hint').textContent = 'valor que sai do sensor, sem filtro';
   wfImg = null; wfFresh = true;
@@ -1426,6 +1443,66 @@ function drawTrend() {
 
   ctx.fillStyle = '#4d6076'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   for (const t of ticks(0, tMax, 6)) ctx.fillText(fmtDur(t), xOf(t), y1 + 3);
+}
+
+/* Arrastar no grafico de tendencia move o instante. O slider continua ali,
+   mas ninguem procura um slider quando esta olhando a curva - a mao vai no
+   grafico. As setas do teclado fazem o passo fino. */
+function logScrubAt(clientX) {
+  const doc = LOG.open; if (!doc) return;
+  const cv = $('cv-raw'), r = cv.getBoundingClientRect();
+  const x0 = 58, x1 = r.width - 8;                 // mesmas margens de drawTrend()
+  const f = (clientX - r.left - x0) / Math.max(1, x1 - x0);
+  const tMax = doc.rows[doc.rows.length - 1].t || 1;
+  const alvo = Math.max(0, Math.min(1, f)) * tMax;
+
+  // a linha do log e por tempo, nao por indice: acha a mais proxima
+  let melhor = 0, dist = Infinity;
+  doc.rows.forEach((row, i) => {
+    const d = Math.abs(row.t - alvo);
+    if (d < dist) { dist = d; melhor = i; }
+  });
+  $('log-pos').value = melhor;
+  logSeek(melhor);
+}
+
+function logStep(delta) {
+  const doc = LOG.open; if (!doc) return;
+  const i = Math.max(0, Math.min(doc.rows.length - 1, +$('log-pos').value + delta));
+  $('log-pos').value = i;
+  logSeek(i);
+}
+
+function wireScrub() {
+  const cv = $('cv-raw');
+  let arrastando = false;
+
+  cv.addEventListener('pointerdown', (e) => {
+    if (!LOG.open) return;
+    arrastando = true;
+    cv.setPointerCapture(e.pointerId);
+    logScrubAt(e.clientX);
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (arrastando) logScrubAt(e.clientX);
+  });
+  const solta = (e) => {
+    if (!arrastando) return;
+    arrastando = false;
+    try { cv.releasePointerCapture(e.pointerId); } catch (err) { /* ja soltou */ }
+  };
+  cv.addEventListener('pointerup', solta);
+  cv.addEventListener('pointercancel', solta);
+
+  // setas so respondem quando nao se esta digitando num campo
+  document.addEventListener('keydown', (e) => {
+    if (!LOG.open) return;
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const alvo = e.target;
+    if (alvo && /^(INPUT|SELECT|TEXTAREA)$/.test(alvo.tagName)) return;
+    e.preventDefault();
+    logStep(e.key === 'ArrowRight' ? 1 : -1);
+  });
 }
 
 /* ===================================================== exportar codigo == */

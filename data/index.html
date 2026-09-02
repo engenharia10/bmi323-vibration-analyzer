@@ -8,7 +8,7 @@
 <!-- Espectro com um pico dominante, embutido como data URI: sem arquivo extra
      no LittleFS e sem uma segunda requisicao para a placa servir. -->
 <link rel="icon" href="data:image/svg+xml,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2016%2016%22><rect%20width=%2216%22%20height=%2216%22%20rx=%223.5%22%20fill=%22%230d121a%22/><g%20fill=%22%2322d3ee%22><rect%20x=%222.2%22%20y=%229.2%22%20width=%222.1%22%20height=%224.8%22%20rx=%22.7%22/><rect%20x=%225.4%22%20y=%227%22%20width=%222.1%22%20height=%227%22%20rx=%22.7%22/><rect%20x=%2211.7%22%20y=%228%22%20width=%222.1%22%20height=%226%22%20rx=%22.7%22/></g><rect%20x=%228.6%22%20y=%222%22%20width=%222.1%22%20height=%2212%22%20rx=%22.7%22%20fill=%22%23fbbf24%22/></svg>">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 
@@ -46,6 +46,7 @@
              aria-label="instante do log">
       <output class="lgt" id="log-t">—</output>
       <button class="mini" id="bt-log-close">voltar ao vivo</button>
+      <span class="lghint">arraste no gráfico, ou ← →</span>
     </div>
 
     <div class="panel">
@@ -355,8 +356,18 @@
         <button class="btn" id="bt-code">Código C</button>
         <button class="btn" id="bt-save">Salvar na flash</button>
       </div>
+      <div class="ctl logdur">
+        <span class="wide">janela</span>
+        <select class="tsel wide3" id="log-dur">
+          <option value="10">10 s</option>
+          <option value="30" selected>30 s</option>
+          <option value="60">1 min</option>
+          <option value="300">5 min</option>
+          <option value="0">até eu parar</option>
+        </select>
+      </div>
       <div class="btns">
-        <button class="btn" id="bt-log-rec">Gravar log</button>
+        <button class="btn" id="bt-log-rec">Iniciar log</button>
         <button class="btn" id="bt-log-save" disabled>Salvar log</button>
         <button class="btn" id="bt-log-open">Abrir log</button>
         <input type="file" id="log-file" accept=".json,application/json" hidden>
@@ -369,6 +380,6 @@
   </aside>
 </main>
 
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>
