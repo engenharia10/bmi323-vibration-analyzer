@@ -1330,6 +1330,8 @@ function logOpen(doc, nome) {
   $('log-pos').max = doc.rows.length - 1;
   $('log-pos').value = 0;
   $('raw-title').innerHTML = 'Tendência do log <small id="raw-span"></small>';
+  $('raw-span').textContent = doc.rows.length + ' amostras · ' +
+                              fmtDur(doc.rows[doc.rows.length - 1].t);
   $('raw-hint').textContent = 'RMS e pico dominante ao longo da gravação';
 
   // o waterfall vira o espectrograma da sessao inteira: empurra tudo de uma vez
@@ -2465,8 +2467,11 @@ function offlineTick() {
     rdata[cc] = arr;
   }
   S.rawscope = { pts, dt, mask, data: rdata };
-  $('raw-span').textContent = (pts * dt * 1000).toFixed(0) + ' ms \u00b7 ' +
-                              (1 / dt).toFixed(0) + ' pontos/s';
+  // com log aberto o cabecalho e do log: a previa nao anuncia o vivo
+  if (!LOG.open) {
+    $('raw-span').textContent = (pts * dt * 1000).toFixed(0) + ' ms \u00b7 ' +
+                                (1 / dt).toFixed(0) + ' pontos/s';
+  }
 
   // ------------------------------------------------------ picos e metricas
   S.peaks = [];

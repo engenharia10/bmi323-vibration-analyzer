@@ -75,7 +75,14 @@ main{
   display:grid;grid-template-columns:minmax(0,1fr) 344px;
   gap:12px;padding:12px;
 }
-.charts{display:grid;grid-template-rows:1.35fr 1fr 1fr;gap:12px;min-height:0;min-width:0}
+/* Coluna flexivel, nao grid de linhas fixas: a barra do log entra e sai do
+   topo conforme o usuario abre um log, e com grid-template-rows ela roubaria
+   uma das linhas e esticaria ate ocupar 1.35fr da altura. Com flex ela fica
+   com a altura do proprio conteudo (flex:none) e os graficos dividem o resto
+   na mesma proporcao de antes. */
+.charts{display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0}
+.charts>.panel{flex:1.35 1 0;min-height:0}
+.charts>.row2{flex:1 1 0;min-height:0}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;min-height:0;min-width:0}
 .side{
   display:flex;flex-direction:column;gap:12px;
