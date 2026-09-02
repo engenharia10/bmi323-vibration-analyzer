@@ -8,7 +8,7 @@
 <!-- Espectro com um pico dominante, embutido como data URI: sem arquivo extra
      no LittleFS e sem uma segunda requisicao para a placa servir. -->
 <link rel="icon" href="data:image/svg+xml,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2016%2016%22><rect%20width=%2216%22%20height=%2216%22%20rx=%223.5%22%20fill=%22%230d121a%22/><g%20fill=%22%2322d3ee%22><rect%20x=%222.2%22%20y=%229.2%22%20width=%222.1%22%20height=%224.8%22%20rx=%22.7%22/><rect%20x=%225.4%22%20y=%227%22%20width=%222.1%22%20height=%227%22%20rx=%22.7%22/><rect%20x=%2211.7%22%20y=%228%22%20width=%222.1%22%20height=%226%22%20rx=%22.7%22/></g><rect%20x=%228.6%22%20y=%222%22%20width=%222.1%22%20height=%2212%22%20rx=%22.7%22%20fill=%22%23fbbf24%22/></svg>">
-<link rel="stylesheet" href="style.css?v=13">
+<link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 
@@ -41,12 +41,19 @@
 
     <div class="logbar" id="logbar" hidden>
       <span class="tag alt">LOG</span>
+      <button class="lgplay" id="bt-log-play" title="reproduzir">⏵</button>
       <span class="lgname" id="log-name">—</span>
       <input type="range" id="log-pos" min="0" max="0" step="1" value="0"
              aria-label="instante do log">
       <output class="lgt" id="log-t">—</output>
+      <select class="tsel" id="log-speed" aria-label="velocidade">
+        <option value="0.5">0,5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+        <option value="4">4×</option>
+        <option value="10">10×</option>
+      </select>
       <button class="mini" id="bt-log-close">voltar ao vivo</button>
-      <span class="lghint">arraste no gráfico, ou ← →</span>
     </div>
 
     <div class="panel">
@@ -356,21 +363,10 @@
         <button class="btn" id="bt-code">Código C</button>
         <button class="btn" id="bt-save">Salvar na flash</button>
       </div>
-      <div class="ctl logdur">
-        <span class="wide">janela</span>
-        <select class="tsel wide3" id="log-dur">
-          <option value="10">10 s</option>
-          <option value="30" selected>30 s</option>
-          <option value="60">1 min</option>
-          <option value="300">5 min</option>
-          <option value="0">até eu parar</option>
-        </select>
-      </div>
       <div class="btns">
-        <button class="btn" id="bt-log-rec">Iniciar log</button>
-        <button class="btn" id="bt-log-save" disabled>Salvar log</button>
+        <button class="btn" id="bt-log-rec">Gravar log</button>
         <button class="btn" id="bt-log-open">Abrir log</button>
-        <input type="file" id="log-file" accept=".json,application/json" hidden>
+        <input type="file" id="log-file" accept=".bmilog,application/octet-stream" hidden>
       </div>
       <p class="hint" id="log-stat">nenhum log gravado</p>
       <pre id="code-out" hidden></pre>
@@ -380,6 +376,6 @@
   </aside>
 </main>
 
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

@@ -55,18 +55,31 @@ function connect() {
   ws.onclose = () => { $('link-dot').classList.remove('on'); setTimeout(connect, 1500); };
   ws.onerror = () => ws.close();
   ws.onmessage = (ev) => {
-    if (typeof ev.data === 'string') return onJson(JSON.parse(ev.data));
-    onBinary(ev.data);
+    if (typeof ev.data === 'string') feedText(ev.data);
+    else feedBinary(ev.data);
   };
+}
+
+/* Tudo que chega da placa passa por aqui. E o unico ponto onde da para gravar
+   o fluxo como veio, e o unico que a reproducao precisa silenciar - dai para
+   baixo o codigo e o mesmo, gravado ou ao vivo. */
+function feedText(txt) {
+  if (LOG.play) return;
+  logCapture(0, txt);
+  let m;
+  try { m = JSON.parse(txt); } catch (e) { return; }
+  onJson(m);
+}
+
+function feedBinary(buf) {
+  if (LOG.play) return;
+  logCapture(1, buf);
+  onBinary(buf);
 }
 
 function onJson(m) {
   if (m.t === 'config') { applyConfig(m.cfg); return; }
   if (m.t !== 'status') return;
-  logRecord(m);
-  // com log aberto a tela e do log: o vivo continua chegando e sendo gravado,
-  // mas nao desenha por cima do instante que o usuario esta olhando
-  if (LOG.open) return;
   $('m-fs').textContent = m.fs.toFixed(0);
   $('m-meas').textContent = m.measured.toFixed(0);
   $('m-rms').textContent = m.rmsRaw.toFixed(1);
@@ -93,7 +106,6 @@ function onJson(m) {
 }
 
 function onBinary(buf) {
-  if (LOG.open) return;
   const dv = new DataView(buf);
   if (dv.getUint8(0) !== 0xA5) return;
   const type   = dv.getUint8(1);
@@ -409,12 +421,12 @@ function drawLanes(cvId, src, emptyMsg) {
 // distincao a tela fica dizendo "aguardando" para sempre.
 function rawEmptyMsg() {
   if (S.rawscope) return 'nenhum canal selecionado';
+  if (LOG.play) return 'reproduzindo…';
   if (S.spec) return 'placa conectada, mas sem leitura crua — grave o firmware novo';
   return 'aguardando dados do sensor…';
 }
 
-const drawRawScope = () =>
-  (LOG.open ? drawTrend() : drawLanes('cv-raw', S.rawscope, rawEmptyMsg()));
+const drawRawScope = () => drawLanes('cv-raw', S.rawscope, rawEmptyMsg());
 
 
 /* ========================================================= waterfall ==== */
@@ -1091,17 +1103,7 @@ function openTypeIn(out, rng) {
 function wire() {
   wireTypeIn();
 
-  wireScrub();
-  $('bt-log-rec').onclick = logToggleRec;
-  $('bt-log-save').onclick = logSave;
-  $('bt-log-open').onclick = () => $('log-file').click();
-  $('log-file').onchange = (e) => {
-    const f = e.target.files && e.target.files[0];
-    if (f) logLoad(f);
-    e.target.value = '';        // permite reabrir o mesmo arquivo
-  };
-  $('log-pos').oninput = (e) => logSeek(+e.target.value);
-  $('bt-log-close').onclick = logClose;
+  wireLog();
 
   Object.keys(FSTAGES).forEach((t) => { $(t).onclick = () => setFilterTab(t); });
   let startTab = 'st-lpf1';
@@ -1201,352 +1203,309 @@ function wire() {
 }
 
 /* ============================================================== log ===== */
-/* Gravar a sessao e reabrir depois. Fica tudo no navegador: a flash do ESP32
-   mal cabe a interface, e o PC tem disco de sobra.
+/* Grava o fluxo BRUTO que chega da placa - cada quadro binario e cada status,
+   byte por byte, com o instante em que chegou - e reproduz jogando os mesmos
+   quadros nos mesmos onJson()/onBinary(). Nao ha caminho separado de "modo
+   log": a tela nao tem como saber a diferenca, entao a reproducao e igual ao
+   vivo por construcao.
 
-   Uma linha por mensagem de status, que sai junto do quadro de espectro - ou
-   seja ~5 Hz, nao 1 Hz - com os escalares, a leitura dos 6 eixos e o espectro
-   do canal em detalhe. 512 bins arredondados dao 3350 B por linha (medido),
-   entao 1 min fica perto de 1 MB. E o espectro que pesa, e e justamente ele
-   que permite reconstruir o waterfall inteiro depois. */
+   Gravar resumo (so os escalares) era mais leve, mas obrigava um segundo
+   desenho para cada painel e nunca ficava igual. Isto e mais pesado e nao
+   tem esse problema.
+
+   Container: "BMILOG" 0x01 0x00, u32 tamanho do cabecalho, cabecalho JSON,
+   e entao registros [u8 tipo][f64 ms][u32 tamanho][carga].
+   tipo 0 = status em JSON, 1 = quadro binario.
+
+   Enquanto grava, os bytes vao direto para o disco pela File System Access
+   API - e o que permite gravar por horas sem encher a memoria. Onde ela nao
+   existe (Firefox), acumula na memoria e baixa no fim. */
+
+const LOG_MAGIC = [66, 77, 73, 76, 79, 71, 1, 0];      // BMILOG\x01\x00
+const LOG_FLUSH = 1 << 18;                              // 256 kB por escrita
 
 const LOG = {
-  rec: false,          // gravando
+  rec: false,
   t0: 0,
-  rows: [],
-  head: null,          // config e escalas no inicio da gravacao
-  open: null,          // log carregado: { head, rows }
-  dur: 30,             // segundos da janela; 0 = ate o usuario parar
+  w: null,          // WritableStream do arquivo, quando ha
+  buf: [],          // pedacos ainda nao gravados
+  bufLen: 0,
+  mem: null,        // acumulo total, so no modo sem File System Access
+  bytes: 0,
+  play: null,       // reproducao ativa
 };
-
-function logRecord(m) {
-  if (!LOG.rec) return;
-  if (!LOG.rows.length) {
-    LOG.t0 = Date.now();
-    LOG.head = {
-      v: 1,
-      inicio: new Date().toISOString(),
-      cfg: S.cfg ? JSON.parse(JSON.stringify(S.cfg)) : null,
-      fs: m.fs,
-      bins: S.spec ? S.spec.bins : 0,
-      binHz: S.spec ? S.spec.binHz : 0,
-      axis: S.spec ? S.spec.axis : (S.cfg ? S.cfg.axis : 0),
-    };
-  }
-  // espectro do canal em detalhe, arredondado: e o que vira waterfall na volta
-  let spec = null;
-  if (S.spec && S.spec.ch[S.spec.axis]) {
-    const src = S.spec.ch[S.spec.axis];
-    spec = new Array(src.length);
-    for (let i = 0; i < src.length; i++) spec[i] = +src[i].toFixed(3);
-  }
-  LOG.rows.push({
-    t: +((Date.now() - LOG.t0) / 1000).toFixed(2),
-    fs: m.fs, meas: m.measured, rms: m.rmsRaw, rmsF: m.rmsFilt,
-    pkpk: m.pkpk, temp: m.temp,
-    lsb: m.lsbCh || [], dc: m.dcCh || [], acRms: m.rmsCh || [],
-    peaks: (m.peaks || []).map((q) => ({ f: +q.f.toFixed(2), a: +q.a.toFixed(3) })),
-    dyn: m.dyn || [], att: m.att || null,
-    spec,
-  });
-  // janela fechada: para sozinho quando completa o tempo escolhido, para o
-  // usuario nao ter que cronometrar nem lembrar de apertar parar
-  if (LOG.dur > 0 && LOG.rows[LOG.rows.length - 1].t >= LOG.dur) {
-    logToggleRec();
-    $('log-stat').textContent =
-      'janela de ' + fmtDur(LOG.dur) + ' completa · ' + LOG.rows.length + ' amostras';
-    return;
-  }
-  logStat();
-}
-
-function logStat() {
-  const n = LOG.rows.length;
-  if (LOG.rec) {
-    const seg = n ? LOG.rows[n - 1].t : 0;
-    // estimativa: serializar tudo a cada segundo so para medir sairia caro.
-    // 3350 B/linha com espectro de 512 bins, 330 B sem - medido, nao chutado.
-    const mb = (n * (LOG.rows[0] && LOG.rows[0].spec ? 3350 : 330)) / 1048576;
-    const alvo = LOG.dur > 0 ? ' / ' + fmtDur(LOG.dur) : '';
-    $('log-stat').textContent = 'gravando  ' + fmtDur(seg) + alvo +
-      '  ·  ' + n + ' amostras  ·  ~' + mb.toFixed(1) + ' MB';
-  } else if (n) {
-    $('log-stat').textContent = n + ' amostras gravadas (' + fmtDur(LOG.rows[n - 1].t) + ')';
-  } else {
-    $('log-stat').textContent = 'nenhum log gravado';
-  }
-  $('bt-log-save').disabled = !n;
-}
 
 const fmtDur = (s) => {
   const m = Math.floor(s / 60), r = Math.floor(s % 60);
   return m + ':' + String(r).padStart(2, '0');
 };
+const fmtMB = (b) => (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + ' MB';
 
-function logToggleRec() {
-  LOG.rec = !LOG.rec;
-  if (LOG.rec) {
-    LOG.rows = []; LOG.head = null;
-    LOG.dur = +$('log-dur').value || 0;
-    if (LOG.open) logClose();      // gravar e reproduzir ao mesmo tempo confunde
-  }
-  $('bt-log-rec').textContent = LOG.rec ? 'Parar gravação' : 'Iniciar log';
-  $('bt-log-rec').classList.toggle('rec', LOG.rec);
+/* ------------------------------------------------------------- gravar -- */
+
+function logCapture(kind, data) {
+  if (!LOG.rec) return;
+  const payload = (kind === 0) ? new TextEncoder().encode(data) : new Uint8Array(data);
+  const rec = new Uint8Array(13 + payload.length);
+  const dv = new DataView(rec.buffer);
+  dv.setUint8(0, kind);
+  dv.setFloat64(1, Date.now() - LOG.t0, true);
+  dv.setUint32(9, payload.length, true);
+  rec.set(payload, 13);
+  logPush(rec);
+}
+
+function logPush(chunk) {
+  LOG.buf.push(chunk);
+  LOG.bufLen += chunk.length;
+  LOG.bytes += chunk.length;
+  if (LOG.bufLen >= LOG_FLUSH) logFlush();
   logStat();
 }
 
-function logSave() {
-  if (!LOG.rows.length) return;
-  const doc = Object.assign({}, LOG.head, { rows: LOG.rows });
-  const blob = new Blob([JSON.stringify(doc)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'bmi323-' + (LOG.head.inicio || '').replace(/[:.]/g, '-').slice(0, 19) + '.json';
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+function logFlush() {
+  if (!LOG.buf.length) return;
+  const blob = new Blob(LOG.buf);
+  LOG.buf = []; LOG.bufLen = 0;
+  if (LOG.w) {
+    // fila implicita: cada write espera o anterior porque o stream serializa
+    LOG.w.write(blob).catch(() => { /* disco cheio ou arquivo fechado */ });
+  } else if (LOG.mem) {
+    LOG.mem.push(blob);
+  }
 }
+
+async function logStartRec() {
+  const nome = 'bmi323-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.bmilog';
+  LOG.w = null; LOG.mem = null;
+  if (window.showSaveFilePicker) {
+    try {
+      const h = await window.showSaveFilePicker({
+        suggestedName: nome,
+        types: [{ description: 'Log do analisador', accept: { 'application/octet-stream': ['.bmilog'] } }],
+      });
+      LOG.w = await h.createWritable();
+    } catch (e) {
+      return;                       // o usuario cancelou a escolha do arquivo
+    }
+  } else {
+    LOG.mem = [];                   // sem acesso a disco: junta e baixa no fim
+  }
+
+  if (LOG.play) logClose();         // gravar e reproduzir ao mesmo tempo confunde
+
+  LOG.rec = true;
+  LOG.t0 = Date.now();
+  LOG.buf = []; LOG.bufLen = 0; LOG.bytes = 0;
+  LOG.nome = nome;
+
+  const head = new TextEncoder().encode(JSON.stringify({
+    v: 1,
+    inicio: new Date().toISOString(),
+    cfg: S.cfg ? JSON.parse(JSON.stringify(S.cfg)) : null,
+  }));
+  const pre = new Uint8Array(LOG_MAGIC.length + 4 + head.length);
+  pre.set(LOG_MAGIC, 0);
+  new DataView(pre.buffer).setUint32(LOG_MAGIC.length, head.length, true);
+  pre.set(head, LOG_MAGIC.length + 4);
+  logPush(pre);
+
+  logButtons();
+}
+
+async function logStopRec() {
+  LOG.rec = false;
+  logFlush();
+  if (LOG.w) {
+    try { await LOG.w.close(); } catch (e) { /* ja fechado */ }
+    LOG.w = null;
+  } else if (LOG.mem) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(LOG.mem, { type: 'application/octet-stream' }));
+    a.download = LOG.nome;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    LOG.mem = null;
+  }
+  logButtons();
+  logStat();
+}
+
+function logToggleRec() {
+  if (LOG.rec) logStopRec(); else logStartRec();
+}
+
+function logButtons() {
+  $('bt-log-rec').textContent = LOG.rec ? 'Parar gravação' : 'Gravar log';
+  $('bt-log-rec').classList.toggle('rec', LOG.rec);
+}
+
+function logStat() {
+  const el = $('log-stat');
+  if (LOG.rec) {
+    const seg = (Date.now() - LOG.t0) / 1000;
+    el.textContent = 'gravando  ' + fmtDur(seg) + '  ·  ' + fmtMB(LOG.bytes) +
+                     (LOG.w ? '  ·  direto no arquivo' : '  ·  na memória');
+  } else if (LOG.bytes) {
+    el.textContent = 'último log: ' + fmtMB(LOG.bytes);
+  } else {
+    el.textContent = 'nenhum log gravado';
+  }
+}
+
+/* --------------------------------------------------------- reproduzir -- */
 
 function logLoad(file) {
   const fr = new FileReader();
   fr.onload = () => {
-    let doc;
-    try { doc = JSON.parse(fr.result); } catch (e) { doc = null; }
-    if (!doc || !Array.isArray(doc.rows) || !doc.rows.length) {
-      $('log-stat').textContent = 'arquivo não é um log válido deste analisador';
-      return;
+    try {
+      logOpen(logParse(fr.result), file.name);
+    } catch (e) {
+      $('log-stat').textContent = 'não consegui ler: ' + e.message;
     }
-    logOpen(doc, file.name);
   };
-  fr.readAsText(file);
+  fr.readAsArrayBuffer(file);
+}
+
+// Indexa sem copiar: os registros ficam como deslocamentos no mesmo buffer.
+function logParse(ab) {
+  const u8 = new Uint8Array(ab), dv = new DataView(ab);
+  for (let i = 0; i < LOG_MAGIC.length; i++) {
+    if (u8[i] !== LOG_MAGIC[i]) throw new Error('não é um log deste analisador');
+  }
+  let p = LOG_MAGIC.length;
+  const hlen = dv.getUint32(p, true); p += 4;
+  const head = JSON.parse(new TextDecoder().decode(new Uint8Array(ab, p, hlen)));
+  p += hlen;
+
+  const recs = [];
+  while (p + 13 <= u8.length) {
+    const kind = dv.getUint8(p);
+    const t = dv.getFloat64(p + 1, true);
+    const len = dv.getUint32(p + 9, true);
+    p += 13;
+    if (p + len > u8.length) break;          // gravacao interrompida no meio
+    recs.push({ kind, t, off: p, len });
+    p += len;
+  }
+  if (!recs.length) throw new Error('log vazio');
+  return { head, ab, recs, dur: recs[recs.length - 1].t };
 }
 
 function logOpen(doc, nome) {
-  LOG.open = doc;
-  if (LOG.rec) logToggleRec();
+  if (LOG.rec) logStopRec();
+  LOG.play = { doc, i: 0, tv: 0, playing: false, speed: 1, last: 0 };
 
   $('logbar').hidden = false;
-  $('cv-raw').classList.add('scrub');
-  $('log-name').textContent = nome + '  ·  ' + doc.rows.length + ' amostras';
-  $('log-pos').max = doc.rows.length - 1;
+  $('log-name').textContent = nome;
+  $('log-pos').max = Math.max(1, Math.round(doc.dur / 1000));   // o slider anda em segundos
   $('log-pos').value = 0;
-  $('raw-title').innerHTML = 'Tendência do log <small id="raw-span"></small>';
-  $('raw-span').textContent = doc.rows.length + ' amostras · ' +
-                              fmtDur(doc.rows[doc.rows.length - 1].t);
-  $('raw-hint').textContent = 'RMS e pico dominante ao longo da gravação';
-
-  // o waterfall vira o espectrograma da sessao inteira: empurra tudo de uma vez
-  wfImg = null; wfFresh = true;
-  doc.rows.forEach((r) => {
-    if (!r.spec) return;
-    S.spec = { bins: r.spec.length, binHz: doc.binHz, fs: doc.fs,
-               mask: 1 << doc.axis, axis: doc.axis, ch: [], filt: null };
-    S.spec.ch[doc.axis] = r.spec;
-    pushWaterfall();
-  });
-
-  logSeek(0);
+  if (doc.head && doc.head.cfg) applyConfig(doc.head.cfg);
+  logResetView();
+  logPlayPause(true);
 }
 
 function logClose() {
-  LOG.open = null;
+  if (LOG.play) LOG.play.playing = false;
+  LOG.play = null;
   $('logbar').hidden = true;
-  $('cv-raw').classList.remove('scrub');
-  $('raw-title').innerHTML = 'Leitura da IMU <small id="raw-span"></small>';
-  $('raw-hint').textContent = 'valor que sai do sensor, sem filtro';
+  logResetView();
+  // a tela ficou com a config gravada no log; a da placa e outra
+  if (!S.offline) {
+    fetch('api/config')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(applyConfig)
+      .catch(() => { /* offline ou placa fora: fica o que esta */ });
+  }
+}
+
+// Volta a tela ao zero: sem isso o waterfall mistura o que ficou do vivo com
+// o que vem do log, e o espectrograma passa a mentir.
+function logResetView() {
   wfImg = null; wfFresh = true;
+  S.spec = S.scope = S.fscope = S.rawscope = null;
+  S.peaks = []; S.peaksHeld = [];
 }
 
-// Leva a tela para o instante escolhido do log
-function logSeek(i) {
-  const doc = LOG.open; if (!doc) return;
-  const r = doc.rows[Math.max(0, Math.min(doc.rows.length - 1, i))];
-  if (!r) return;
+function logPlayPause(play) {
+  const P = LOG.play; if (!P) return;
+  P.playing = (play === undefined) ? !P.playing : play;
+  P.last = performance.now();
+  $('bt-log-play').textContent = P.playing ? '⏸' : '⏵';
+  $('bt-log-play').title = P.playing ? 'pausar' : 'reproduzir';
+}
 
-  $('log-t').textContent = fmtDur(r.t) + ' / ' + fmtDur(doc.rows[doc.rows.length - 1].t);
-  $('m-fs').textContent = r.fs.toFixed(0);
-  $('m-meas').textContent = r.meas.toFixed(0);
-  $('m-rms').textContent = r.rms.toFixed(1);
-  $('m-rmsf').textContent = r.rmsF.toFixed(1);
-  $('m-pkpk').textContent = r.pkpk.toFixed(0);
-  $('m-temp').textContent = r.temp.toFixed(1);
+// Reposiciona no tempo. Voltar atras limpa a tela: o waterfall e cumulativo e
+// nao da para "desdesenhar" - ele volta a encher a partir dali.
+function logSeekTo(ms) {
+  const P = LOG.play; if (!P) return;
+  const recs = P.doc.recs;
+  if (ms < P.tv) logResetView();
+  P.tv = Math.max(0, Math.min(P.doc.dur, ms));
+  let i = 0;
+  while (i < recs.length && recs[i].t <= P.tv) i++;
+  P.i = i;
+  logTime();
+}
 
-  S.lsbCh = r.lsb; S.dcCh = r.dc; S.rmsCh = r.acRms;
-  renderAxes();
+function logTime() {
+  const P = LOG.play; if (!P) return;
+  $('log-pos').value = Math.round(P.tv / 1000);
+  $('log-t').textContent = fmtDur(P.tv / 1000) + ' / ' + fmtDur(P.doc.dur / 1000);
+}
 
-  // renderPeaks() passa por prunePeaks(), que reescreve S.peaks a partir de
-  // S.peaksHeld - entao os picos do log entram por la, com carimbo novo
+// Chamada uma vez por quadro de video: solta todos os registros que ja
+// venceram. Assim a cadencia na tela e a mesma que foi gravada.
+function logTick() {
+  const P = LOG.play; if (!P || !P.playing) return;
   const agora = performance.now();
-  S.peaksHeld = r.peaks.map((q) => ({ f: q.f, a: q.a, t: agora }));
-  renderPeaks();
+  P.tv += (agora - P.last) * P.speed;
+  P.last = agora;
 
-  S.dyn = r.dyn || [];
-  S.att = r.att || null;
-  renderAttitude();
-
-  if (r.spec) {
-    S.spec = { bins: r.spec.length, binHz: doc.binHz, fs: doc.fs,
-               mask: 1 << doc.axis, axis: doc.axis, ch: [], filt: null };
-    S.spec.ch[doc.axis] = r.spec;
-  }
-}
-
-/* Tendencia: o que aconteceu ao longo da gravacao. Tres faixas - RMS cru,
-   RMS filtrado e frequencia do pico dominante - com a linha do instante
-   selecionado por cima. E a vista que responde "quando piorou?". */
-function drawTrend() {
-  const doc = LOG.open;
-  const cv = $('cv-raw'); const { ctx, w, h } = fitCanvas(cv);
-  ctx.clearRect(0, 0, w, h);
-  if (!doc) return;
-
-  const rows = doc.rows;
-  const tMax = rows[rows.length - 1].t || 1;
-  const series = [
-    { nome: 'rms cru', cor: '#22d3ee', un: 'mg', get: (r) => r.rms },
-    { nome: 'rms filtrado', cor: '#fbbf24', un: 'mg', get: (r) => r.rmsF },
-    { nome: 'pico', cor: '#f472b6', un: 'Hz', get: (r) => (r.peaks[0] ? r.peaks[0].f : 0) },
-  ];
-
-  const x0 = 58, x1 = w - 8, y0 = 4, y1 = h - 16;
-  const laneH = (y1 - y0) / series.length;
-  const xOf = (t) => x0 + (t / tMax) * (x1 - x0);
-  ctx.font = '9px ui-monospace,monospace';
-
-  const faixas = [];
-  series.forEach((sr, k) => {
-    const top = y0 + laneH * k, cy = top + laneH / 2, half = laneH / 2 - 4;
-    let amp = 1e-6;
-    rows.forEach((r) => { amp = Math.max(amp, sr.get(r)); });
-    amp = niceCeil(amp * 1.1);
-    // guardada para o marcador do cursor cair exatamente sobre a curva
-    const yOf = (v) => top + laneH - 3 - (v / amp) * (half * 2 - 3);
-    faixas.push({ sr, yOf });
-
-    ctx.strokeStyle = '#1b2534'; ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x0, Math.round(top + laneH) + 0.5); ctx.lineTo(x1, Math.round(top + laneH) + 0.5);
-    ctx.stroke();
-
-    ctx.strokeStyle = sr.cor; ctx.lineWidth = 1.3; ctx.beginPath();
-    rows.forEach((r, i) => {
-      const x = xOf(r.t);
-      i === 0 ? ctx.moveTo(x, yOf(sr.get(r))) : ctx.lineTo(x, yOf(sr.get(r)));
-    });
-    ctx.stroke();
-
-    ctx.fillStyle = sr.cor; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText(sr.nome, 5, cy - 5);
-    ctx.fillStyle = '#5b6c81';
-    ctx.fillText('máx ' + (amp >= 100 ? amp.toFixed(0) : amp.toFixed(1)) + ' ' + sr.un, 5, cy + 6);
-  });
-
-  // ---- instante selecionado: linha, marcador em cada curva e a leitura
-  const r = rows[+$('log-pos').value];
-  if (r) {
-    const x = Math.round(xOf(r.t)) + 0.5;
-    ctx.strokeStyle = 'rgba(244,114,182,.75)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
-
-    faixas.forEach((f) => {
-      const y = f.yOf(f.sr.get(r));
-      ctx.beginPath(); ctx.arc(x, y, 3, 0, 7);
-      ctx.fillStyle = f.sr.cor; ctx.fill();
-      ctx.strokeStyle = '#0a0e14'; ctx.lineWidth = 1.4; ctx.stroke();
-    });
-
-    // a janela com os numeros daquele ponto: a curva diz a forma, isto diz o valor
-    const linhas = [
-      ['tempo', fmtDur(r.t), '#f472b6'],
-      ['rms cru', r.rms.toFixed(2) + ' mg', '#22d3ee'],
-      ['rms filt', r.rmsF.toFixed(2) + ' mg', '#fbbf24'],
-      ['pico', r.peaks[0] ? r.peaks[0].f.toFixed(1) + ' Hz' : '—', '#f472b6'],
-      ['temp', r.temp.toFixed(1) + ' °C', '#7d8ea3'],
-    ];
-    ctx.font = '10px ui-monospace,monospace';
-    const wRot = Math.max.apply(null, linhas.map((l) => ctx.measureText(l[0]).width));
-    const wVal = Math.max.apply(null, linhas.map((l) => ctx.measureText(l[1]).width));
-    const bw = wRot + wVal + 38, bh = linhas.length * 13 + 11;
-    // vira para o outro lado quando nao cabe a direita do cursor
-    const bx = (x + 12 + bw <= x1) ? x + 12 : x - 12 - bw;
-    const by = Math.max(y0, Math.min(y0 + 3, y1 - bh));
-
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 6); else ctx.rect(bx, by, bw, bh);
-    ctx.fillStyle = 'rgba(11,17,25,.94)'; ctx.fill();
-    ctx.strokeStyle = '#2b3a4d'; ctx.lineWidth = 1; ctx.stroke();
-
-    ctx.textBaseline = 'middle';
-    linhas.forEach((l, i) => {
-      const ly = by + 11 + i * 13;
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#5b6c81'; ctx.fillText(l[0], bx + 10, ly);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = l[2]; ctx.fillText(l[1], bx + bw - 10, ly);
-    });
+  const { recs, ab } = P.doc;
+  let n = 0;
+  while (P.i < recs.length && recs[P.i].t <= P.tv) {
+    const r = recs[P.i++];
+    const slice = ab.slice(r.off, r.off + r.len);
+    if (r.kind === 0) {
+      try { onJson(JSON.parse(new TextDecoder().decode(slice))); } catch (e) { /* linha torta */ }
+    } else {
+      onBinary(slice);
+    }
+    // um quadro de video nao deve virar refem de um log muito adiantado
+    if (++n > 400) break;
   }
 
-  ctx.fillStyle = '#4d6076'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  for (const t of ticks(0, tMax, 6)) ctx.fillText(fmtDur(t), xOf(t), y1 + 3);
+  if (P.i >= recs.length && P.tv >= P.doc.dur) {
+    P.tv = P.doc.dur;
+    logPlayPause(false);
+  }
+  logTime();
 }
 
-/* Arrastar no grafico de tendencia move o instante. O slider continua ali,
-   mas ninguem procura um slider quando esta olhando a curva - a mao vai no
-   grafico. As setas do teclado fazem o passo fino. */
-function logScrubAt(clientX) {
-  const doc = LOG.open; if (!doc) return;
-  const cv = $('cv-raw'), r = cv.getBoundingClientRect();
-  const x0 = 58, x1 = r.width - 8;                 // mesmas margens de drawTrend()
-  const f = (clientX - r.left - x0) / Math.max(1, x1 - x0);
-  const tMax = doc.rows[doc.rows.length - 1].t || 1;
-  const alvo = Math.max(0, Math.min(1, f)) * tMax;
-
-  // a linha do log e por tempo, nao por indice: acha a mais proxima
-  let melhor = 0, dist = Infinity;
-  doc.rows.forEach((row, i) => {
-    const d = Math.abs(row.t - alvo);
-    if (d < dist) { dist = d; melhor = i; }
-  });
-  $('log-pos').value = melhor;
-  logSeek(melhor);
-}
-
-function logStep(delta) {
-  const doc = LOG.open; if (!doc) return;
-  const i = Math.max(0, Math.min(doc.rows.length - 1, +$('log-pos').value + delta));
-  $('log-pos').value = i;
-  logSeek(i);
-}
-
-function wireScrub() {
-  const cv = $('cv-raw');
-  let arrastando = false;
-
-  cv.addEventListener('pointerdown', (e) => {
-    if (!LOG.open) return;
-    arrastando = true;
-    cv.setPointerCapture(e.pointerId);
-    logScrubAt(e.clientX);
-  });
-  cv.addEventListener('pointermove', (e) => {
-    if (arrastando) logScrubAt(e.clientX);
-  });
-  const solta = (e) => {
-    if (!arrastando) return;
-    arrastando = false;
-    try { cv.releasePointerCapture(e.pointerId); } catch (err) { /* ja soltou */ }
+function wireLog() {
+  $('bt-log-rec').onclick = logToggleRec;
+  $('bt-log-open').onclick = () => $('log-file').click();
+  $('log-file').onchange = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) logLoad(f);
+    e.target.value = '';                 // permite reabrir o mesmo arquivo
   };
-  cv.addEventListener('pointerup', solta);
-  cv.addEventListener('pointercancel', solta);
+  $('bt-log-play').onclick = () => logPlayPause();
+  $('bt-log-close').onclick = logClose;
+  $('log-speed').onchange = (e) => { if (LOG.play) LOG.play.speed = +e.target.value; };
+  $('log-pos').oninput = (e) => logSeekTo(+e.target.value * 1000);
 
-  // setas so respondem quando nao se esta digitando num campo
+  // barra de espaco reproduz e pausa, como em qualquer player
   document.addEventListener('keydown', (e) => {
-    if (!LOG.open) return;
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    if (!LOG.play || e.code !== 'Space') return;
     const alvo = e.target;
-    if (alvo && /^(INPUT|SELECT|TEXTAREA)$/.test(alvo.tagName)) return;
+    if (alvo && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(alvo.tagName)) return;
     e.preventDefault();
-    logStep(e.key === 'ArrowRight' ? 1 : -1);
+    logPlayPause();
   });
+
+  setInterval(() => { if (LOG.rec) logStat(); }, 500);
 }
 
 /* ===================================================== exportar codigo == */
@@ -2063,16 +2022,17 @@ function feedSerial(chunk) {
 
 function handleSerialPayload(p) {
   if (p[0] === 0xA5) {
-    onBinary(p.buffer);   // slice() acima ja deu um buffer proprio, offset 0
+    feedBinary(p.buffer);   // slice() acima ja deu um buffer proprio, offset 0
     return;
   }
+  const txt = new TextDecoder().decode(p);
   let m;
   try {
-    m = JSON.parse(new TextDecoder().decode(p));
+    m = JSON.parse(txt);
   } catch (e) {
     return;
   }
-  if (m.t === 'status') onJson(m);
+  if (m.t === 'status') feedText(txt);
   else if (m.odr !== undefined) applyConfig(m);
 }
 
@@ -2334,6 +2294,9 @@ function simTones(t) {
 }
 
 function offlineTick() {
+  // reproduzindo um log, a tela e do log: a previa local ficaria brigando
+  // por S.spec, S.rawscope e os picos a cada quadro
+  if (LOG.play) return;
   const c = S.cfg, bins = c.fft / 2, binHz = c.odr / c.fft;
   const t = performance.now() / 1000 - S.t0;
   const tones = simTones(t);
@@ -2467,11 +2430,8 @@ function offlineTick() {
     rdata[cc] = arr;
   }
   S.rawscope = { pts, dt, mask, data: rdata };
-  // com log aberto o cabecalho e do log: a previa nao anuncia o vivo
-  if (!LOG.open) {
-    $('raw-span').textContent = (pts * dt * 1000).toFixed(0) + ' ms \u00b7 ' +
-                                (1 / dt).toFixed(0) + ' pontos/s';
-  }
+  $('raw-span').textContent = (pts * dt * 1000).toFixed(0) + ' ms \u00b7 ' +
+                              (1 / dt).toFixed(0) + ' pontos/s';
 
   // ------------------------------------------------------ picos e metricas
   S.peaks = [];
@@ -2521,6 +2481,7 @@ function offlineTick() {
 
 /* ============================================================== loop ==== */
 function frame() {
+  logTick();
   drawRawScope();
   drawWaterfall();
   drawScope();

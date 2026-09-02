@@ -348,10 +348,13 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;bac
 .logbar input[type=range]{flex:1;accent-color:var(--resp);min-width:80px}
 .logbar .lgt{font:600 12px/1 var(--mono);color:var(--resp);
   font-variant-numeric:tabular-nums;white-space:nowrap}
-.logbar .lghint{font:400 10px/1 var(--mono);color:#5b6c81;white-space:nowrap}
-.ctl.logdur{margin:10px 0 0}
-/* em modo log o grafico de cima e navegavel: o cursor diz isso */
-#cv-raw.scrub{cursor:ew-resize}
+.lgplay{flex:none;width:28px;height:24px;border-radius:6px;cursor:pointer;
+  border:1px solid rgba(244,114,182,.4);background:rgba(244,114,182,.14);
+  color:var(--resp);font-size:12px;line-height:1}
+.lgplay:hover{background:rgba(244,114,182,.24)}
+.lgplay:focus-visible{outline:1px solid var(--raw);outline-offset:2px}
+.logbar select{flex:none}
+#bt-log-rec.rec{color:var(--bad);border-color:rgba(248,113,113,.45)}
 #bt-log-rec.rec{color:var(--bad);border-color:rgba(248,113,113,.45)}
 
 /* abas: quem manda nos filtros - a lista de oscilacoes ou a mao do usuario.
