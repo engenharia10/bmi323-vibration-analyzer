@@ -80,19 +80,26 @@ main{
    uma das linhas e esticaria ate ocupar 1.35fr da altura. Com flex ela fica
    com a altura do proprio conteudo (flex:none) e os graficos dividem o resto
    na mesma proporcao de antes. */
-.charts{display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0}
-.charts>.panel{flex:1.35 1 0;min-height:0}
-.charts>.row2{flex:1 1 0;min-height:0}
+.charts{display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0;
+  overflow-y:auto;overscroll-behavior:contain;padding-right:3px}
+/* A leitura crua e o painel onde se olha a forma do sinal amostra a amostra.
+   Com tres faixas empilhadas dentro de ~150 px sobravam 50 px por faixa e
+   tudo virava linha reta. Aqui ela vale o triplo, e a coluna rola quando o
+   conjunto nao couber na tela - antes ela era so uma divisao da altura fixa. */
+.charts>.panel{flex:3 1 auto;min-height:0}
+.charts>.panel .canvas-wrap{min-height:420px}
+.charts>.row2{flex:1 1 auto;min-height:210px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;min-height:0;min-width:0}
 .side{
   display:flex;flex-direction:column;gap:12px;
   min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-right:3px;
 }
 .side>.panel{flex:none}
-.side::-webkit-scrollbar{width:9px}
-.side::-webkit-scrollbar-track{background:transparent}
-.side::-webkit-scrollbar-thumb{background:#243141;border-radius:5px;border:2px solid var(--bg)}
-.side::-webkit-scrollbar-thumb:hover{background:#31435a}
+.charts::-webkit-scrollbar,.side::-webkit-scrollbar{width:9px}
+.charts::-webkit-scrollbar-track,.side::-webkit-scrollbar-track{background:transparent}
+.charts::-webkit-scrollbar-thumb,.side::-webkit-scrollbar-thumb{background:#243141;
+  border-radius:5px;border:2px solid var(--bg)}
+.charts::-webkit-scrollbar-thumb:hover,.side::-webkit-scrollbar-thumb:hover{background:#31435a}
 
 /* telas largas: a barra lateral vira duas colunas, o que corta a rolagem
    pela metade (nao elimina: o conteudo somado passa de 1600px) */
@@ -177,6 +184,7 @@ main{
 #p-att{overflow-y:auto}
 @media(max-width:980px){
   .canvas-wrap{flex:none;height:200px}
+  .charts>.panel .canvas-wrap{height:360px}
 }
 canvas{width:100%;height:100%;display:block}
 .legend{position:absolute;top:10px;right:14px;display:flex;gap:5px;flex-wrap:wrap;

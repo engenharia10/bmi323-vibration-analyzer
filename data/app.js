@@ -361,6 +361,11 @@ function placeholder(ctx, g, txt) {
 // Uma faixa por canal, cada uma com sua propria escala: e o que deixa mg e
 // graus/s conviverem no mesmo painel sem uma esmagar a outra.
 
+// sobrepor: um traco por cima do outro na mesma escala, em vez de uma faixa
+// por canal. Com o painel alto isso da muito mais resolucao vertical para cada
+// onda, e permite comparar os eixos direto. Fica em localStorage.
+let OVERLAY = true;
+
 function drawLanes(cvId, src, emptyMsg) {
   const cv = $(cvId); const { ctx, w, h } = fitCanvas(cv);
   ctx.clearRect(0, 0, w, h);
@@ -372,19 +377,27 @@ function drawLanes(cvId, src, emptyMsg) {
     return;
   }
 
+  // Sobrepondo, a faixa passa a ser por UNIDADE, nao por canal: mg e graus/s
+  // nao podem dividir a mesma escala sem uma esmagar a outra. Dentro do grupo
+  // a escala e comum, que e justamente o que torna a comparacao valida.
+  const grupos = OVERLAY
+    ? [chans.filter((c) => c < 3), chans.filter((c) => c >= 3)].filter((g) => g.length)
+    : chans.map((c) => [c]);
+
   const x0 = 52, x1 = w - 8, y0 = 4, y1 = h - 4;
-  const laneH = (y1 - y0) / chans.length;
+  const laneH = (y1 - y0) / grupos.length;
   ctx.font = '9px ui-monospace,monospace';
 
-  chans.forEach((c, k) => {
-    const arr = src.data[c];
+  grupos.forEach((g, k) => {
     const top = y0 + laneH * k;
     const cy = top + laneH / 2;
     const half = laneH / 2 - 3;
 
-    // cada faixa se escala sozinha pelo proprio pico do trecho
     let amp = 1e-6;
-    for (let i = 0; i < src.pts; i++) amp = Math.max(amp, Math.abs(arr[i]));
+    g.forEach((c) => {
+      const arr = src.data[c];
+      for (let i = 0; i < src.pts; i++) amp = Math.max(amp, Math.abs(arr[i]));
+    });
     amp = niceCeil(amp * 1.15);
 
     ctx.strokeStyle = '#1b2534'; ctx.lineWidth = 1;
@@ -398,20 +411,28 @@ function drawLanes(cvId, src, emptyMsg) {
       ctx.stroke();
     }
 
-    ctx.strokeStyle = CH[c].color; ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    for (let i = 0; i < src.pts; i++) {
-      const x = x0 + (i / (src.pts - 1)) * (x1 - x0);
-      const y = cy - (arr[i] / amp) * half;
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.stroke();
+    g.forEach((c) => {
+      const arr = src.data[c];
+      ctx.strokeStyle = CH[c].color; ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      for (let i = 0; i < src.pts; i++) {
+        const x = x0 + (i / (src.pts - 1)) * (x1 - x0);
+        const y = cy - (arr[i] / amp) * half;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    });
 
-    ctx.fillStyle = CH[c].color; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText(CH[c].id, 5, cy - 5);
+    // rotulos empilhados no canto, um por canal do grupo, e a escala comum
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    const alturaRot = Math.min(11, (laneH - 14) / Math.max(1, g.length));
+    g.forEach((c, i) => {
+      ctx.fillStyle = CH[c].color;
+      ctx.fillText(CH[c].id, 5, cy - 6 - (g.length - 1) * alturaRot / 2 + i * alturaRot);
+    });
     ctx.fillStyle = '#5b6c81';
-    ctx.fillText('\u00b1' + (amp >= 100 ? amp.toFixed(0) : amp.toFixed(1)) + ' ' + CH[c].unit,
-                 5, cy + 6);
+    ctx.fillText('\u00b1' + (amp >= 100 ? amp.toFixed(0) : amp.toFixed(1)) + ' ' + CH[g[0]].unit,
+                 5, cy + 6 + (g.length - 1) * alturaRot / 2);
   });
 }
 
@@ -1102,6 +1123,13 @@ function openTypeIn(out, rng) {
 /* =========================================================== controles == */
 function wire() {
   wireTypeIn();
+
+  try { OVERLAY = localStorage.getItem('bmi-overlay') !== '0'; } catch (e) { /* sem storage */ }
+  $('ck-overlay').checked = OVERLAY;
+  $('ck-overlay').onchange = (e) => {
+    OVERLAY = e.target.checked;
+    try { localStorage.setItem('bmi-overlay', OVERLAY ? '1' : '0'); } catch (err) { /* sem storage */ }
+  };
 
   wireLog();
 
