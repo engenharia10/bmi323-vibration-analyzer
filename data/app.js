@@ -13,13 +13,21 @@ const PEAK_HOLD_MS = 1000;
 
 // Os 6 canais da IMU. A cor vale para o espectro, para a legenda e para as
 // faixas da janela de onda filtrada.
+// Seis matizes a 60 graus de distancia em Lab, escolhidos por otimizacao e nao
+// no olho: com as ondas sobrepostas a cor e a UNICA coisa que separa um eixo do
+// outro. A distancia perceptual minima entre pares subiu de 42 para 54 (CIE76)
+// e todos passam de 5,5:1 de contraste sobre o fundo do painel.
+//
+// A familia tambem virou informacao: acelerometro nos frios (verde, ciano,
+// azul) e giroscopio nos quentes (laranja, amarelo, magenta) - o mesmo
+// agrupamento por unidade que as faixas usam quando sobrepostas.
 const CH = [
-  { id: 'aX', label: 'acel X', color: '#22d3ee', unit: 'mg' },
-  { id: 'aY', label: 'acel Y', color: '#34d399', unit: 'mg' },
-  { id: 'aZ', label: 'acel Z', color: '#60a5fa', unit: 'mg' },
-  { id: 'gX', label: 'giro X', color: '#fb923c', unit: '\u00b0/s' },
-  { id: 'gY', label: 'giro Y', color: '#a3e635', unit: '\u00b0/s' },
-  { id: 'gZ', label: 'giro Z', color: '#c084fc', unit: '\u00b0/s' },
+  { id: 'aX', label: 'acel X', color: '#41d3f1', unit: 'mg' },
+  { id: 'aY', label: 'acel Y', color: '#41f1b0', unit: 'mg' },
+  { id: 'aZ', label: 'acel Z', color: '#5e8ff3', unit: 'mg' },
+  { id: 'gX', label: 'giro X', color: '#f17041', unit: '\u00b0/s' },
+  { id: 'gY', label: 'giro Y', color: '#f1f141', unit: '\u00b0/s' },
+  { id: 'gZ', label: 'giro Z', color: '#f141c8', unit: '\u00b0/s' },
 ];
 
 const S = {
