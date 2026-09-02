@@ -63,6 +63,10 @@ function connect() {
 function onJson(m) {
   if (m.t === 'config') { applyConfig(m.cfg); return; }
   if (m.t !== 'status') return;
+  logRecord(m);
+  // com log aberto a tela e do log: o vivo continua chegando e sendo gravado,
+  // mas nao desenha por cima do instante que o usuario esta olhando
+  if (LOG.open) return;
   $('m-fs').textContent = m.fs.toFixed(0);
   $('m-meas').textContent = m.measured.toFixed(0);
   $('m-rms').textContent = m.rmsRaw.toFixed(1);
@@ -89,6 +93,7 @@ function onJson(m) {
 }
 
 function onBinary(buf) {
+  if (LOG.open) return;
   const dv = new DataView(buf);
   if (dv.getUint8(0) !== 0xA5) return;
   const type   = dv.getUint8(1);
@@ -408,7 +413,8 @@ function rawEmptyMsg() {
   return 'aguardando dados do sensor…';
 }
 
-const drawRawScope = () => drawLanes('cv-raw', S.rawscope, rawEmptyMsg());
+const drawRawScope = () =>
+  (LOG.open ? drawTrend() : drawLanes('cv-raw', S.rawscope, rawEmptyMsg()));
 
 
 /* ========================================================= waterfall ==== */
@@ -1085,6 +1091,17 @@ function openTypeIn(out, rng) {
 function wire() {
   wireTypeIn();
 
+  $('bt-log-rec').onclick = logToggleRec;
+  $('bt-log-save').onclick = logSave;
+  $('bt-log-open').onclick = () => $('log-file').click();
+  $('log-file').onchange = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) logLoad(f);
+    e.target.value = '';        // permite reabrir o mesmo arquivo
+  };
+  $('log-pos').oninput = (e) => logSeek(+e.target.value);
+  $('bt-log-close').onclick = logClose;
+
   Object.keys(FSTAGES).forEach((t) => { $(t).onclick = () => setFilterTab(t); });
   let startTab = 'st-lpf1';
   try { startTab = localStorage.getItem('bmi-ftab') || startTab; } catch (e) { /* sem storage */ }
@@ -1180,6 +1197,235 @@ function wire() {
     if (!out.hidden) out.textContent = genCode();
   };
 
+}
+
+/* ============================================================== log ===== */
+/* Gravar a sessao e reabrir depois. Fica tudo no navegador: a flash do ESP32
+   mal cabe a interface, e o PC tem disco de sobra.
+
+   Uma linha por mensagem de status (1 Hz) com os escalares, a leitura dos 6
+   eixos e o espectro do canal em detalhe. 512 bins arredondados dao ~3 kB por
+   linha, entao 10 min de gravacao ficam perto de 2 MB - grande, mas e o que
+   permite reconstruir o waterfall inteiro depois. */
+
+const LOG = {
+  rec: false,          // gravando
+  t0: 0,
+  rows: [],
+  head: null,          // config e escalas no inicio da gravacao
+  open: null,          // log carregado: { head, rows }
+};
+
+function logRecord(m) {
+  if (!LOG.rec) return;
+  if (!LOG.rows.length) {
+    LOG.t0 = Date.now();
+    LOG.head = {
+      v: 1,
+      inicio: new Date().toISOString(),
+      cfg: S.cfg ? JSON.parse(JSON.stringify(S.cfg)) : null,
+      fs: m.fs,
+      bins: S.spec ? S.spec.bins : 0,
+      binHz: S.spec ? S.spec.binHz : 0,
+      axis: S.spec ? S.spec.axis : (S.cfg ? S.cfg.axis : 0),
+    };
+  }
+  // espectro do canal em detalhe, arredondado: e o que vira waterfall na volta
+  let spec = null;
+  if (S.spec && S.spec.ch[S.spec.axis]) {
+    const src = S.spec.ch[S.spec.axis];
+    spec = new Array(src.length);
+    for (let i = 0; i < src.length; i++) spec[i] = +src[i].toFixed(3);
+  }
+  LOG.rows.push({
+    t: +((Date.now() - LOG.t0) / 1000).toFixed(2),
+    fs: m.fs, meas: m.measured, rms: m.rmsRaw, rmsF: m.rmsFilt,
+    pkpk: m.pkpk, temp: m.temp,
+    lsb: m.lsbCh || [], dc: m.dcCh || [], acRms: m.rmsCh || [],
+    peaks: (m.peaks || []).map((q) => ({ f: +q.f.toFixed(2), a: +q.a.toFixed(3) })),
+    dyn: m.dyn || [], att: m.att || null,
+    spec,
+  });
+  logStat();
+}
+
+function logStat() {
+  const n = LOG.rows.length;
+  if (LOG.rec) {
+    const seg = n ? LOG.rows[n - 1].t : 0;
+    // estimativa: serializar tudo a cada segundo so para medir sairia caro.
+    // 3350 B/linha com espectro de 512 bins, 330 B sem - medido, nao chutado.
+    const mb = (n * (LOG.rows[0] && LOG.rows[0].spec ? 3350 : 330)) / 1048576;
+    $('log-stat').textContent =
+      'gravando  ' + fmtDur(seg) + '  ·  ' + n + ' amostras  ·  ~' + mb.toFixed(1) + ' MB';
+  } else if (n) {
+    $('log-stat').textContent = n + ' amostras gravadas (' + fmtDur(LOG.rows[n - 1].t) + ')';
+  } else {
+    $('log-stat').textContent = 'nenhum log gravado';
+  }
+  $('bt-log-save').disabled = !n;
+}
+
+const fmtDur = (s) => {
+  const m = Math.floor(s / 60), r = Math.floor(s % 60);
+  return m + ':' + String(r).padStart(2, '0');
+};
+
+function logToggleRec() {
+  LOG.rec = !LOG.rec;
+  if (LOG.rec) { LOG.rows = []; LOG.head = null; }
+  $('bt-log-rec').textContent = LOG.rec ? 'Parar gravação' : 'Gravar log';
+  $('bt-log-rec').classList.toggle('rec', LOG.rec);
+  logStat();
+}
+
+function logSave() {
+  if (!LOG.rows.length) return;
+  const doc = Object.assign({}, LOG.head, { rows: LOG.rows });
+  const blob = new Blob([JSON.stringify(doc)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'bmi323-' + (LOG.head.inicio || '').replace(/[:.]/g, '-').slice(0, 19) + '.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function logLoad(file) {
+  const fr = new FileReader();
+  fr.onload = () => {
+    let doc;
+    try { doc = JSON.parse(fr.result); } catch (e) { doc = null; }
+    if (!doc || !Array.isArray(doc.rows) || !doc.rows.length) {
+      $('log-stat').textContent = 'arquivo não é um log válido deste analisador';
+      return;
+    }
+    logOpen(doc, file.name);
+  };
+  fr.readAsText(file);
+}
+
+function logOpen(doc, nome) {
+  LOG.open = doc;
+  if (LOG.rec) logToggleRec();
+
+  $('logbar').hidden = false;
+  $('log-name').textContent = nome + '  ·  ' + doc.rows.length + ' amostras';
+  $('log-pos').max = doc.rows.length - 1;
+  $('log-pos').value = 0;
+  $('raw-title').innerHTML = 'Tendência do log <small id="raw-span"></small>';
+  $('raw-hint').textContent = 'RMS e pico dominante ao longo da gravação';
+
+  // o waterfall vira o espectrograma da sessao inteira: empurra tudo de uma vez
+  wfImg = null; wfFresh = true;
+  doc.rows.forEach((r) => {
+    if (!r.spec) return;
+    S.spec = { bins: r.spec.length, binHz: doc.binHz, fs: doc.fs,
+               mask: 1 << doc.axis, axis: doc.axis, ch: [], filt: null };
+    S.spec.ch[doc.axis] = r.spec;
+    pushWaterfall();
+  });
+
+  logSeek(0);
+}
+
+function logClose() {
+  LOG.open = null;
+  $('logbar').hidden = true;
+  $('raw-title').innerHTML = 'Leitura da IMU <small id="raw-span"></small>';
+  $('raw-hint').textContent = 'valor que sai do sensor, sem filtro';
+  wfImg = null; wfFresh = true;
+}
+
+// Leva a tela para o instante escolhido do log
+function logSeek(i) {
+  const doc = LOG.open; if (!doc) return;
+  const r = doc.rows[Math.max(0, Math.min(doc.rows.length - 1, i))];
+  if (!r) return;
+
+  $('log-t').textContent = fmtDur(r.t) + ' / ' + fmtDur(doc.rows[doc.rows.length - 1].t);
+  $('m-fs').textContent = r.fs.toFixed(0);
+  $('m-meas').textContent = r.meas.toFixed(0);
+  $('m-rms').textContent = r.rms.toFixed(1);
+  $('m-rmsf').textContent = r.rmsF.toFixed(1);
+  $('m-pkpk').textContent = r.pkpk.toFixed(0);
+  $('m-temp').textContent = r.temp.toFixed(1);
+
+  S.lsbCh = r.lsb; S.dcCh = r.dc; S.rmsCh = r.acRms;
+  renderAxes();
+
+  // renderPeaks() passa por prunePeaks(), que reescreve S.peaks a partir de
+  // S.peaksHeld - entao os picos do log entram por la, com carimbo novo
+  const agora = performance.now();
+  S.peaksHeld = r.peaks.map((q) => ({ f: q.f, a: q.a, t: agora }));
+  renderPeaks();
+
+  S.dyn = r.dyn || [];
+  S.att = r.att || null;
+  renderAttitude();
+
+  if (r.spec) {
+    S.spec = { bins: r.spec.length, binHz: doc.binHz, fs: doc.fs,
+               mask: 1 << doc.axis, axis: doc.axis, ch: [], filt: null };
+    S.spec.ch[doc.axis] = r.spec;
+  }
+}
+
+/* Tendencia: o que aconteceu ao longo da gravacao. Tres faixas - RMS cru,
+   RMS filtrado e frequencia do pico dominante - com a linha do instante
+   selecionado por cima. E a vista que responde "quando piorou?". */
+function drawTrend() {
+  const doc = LOG.open;
+  const cv = $('cv-raw'); const { ctx, w, h } = fitCanvas(cv);
+  ctx.clearRect(0, 0, w, h);
+  if (!doc) return;
+
+  const rows = doc.rows;
+  const tMax = rows[rows.length - 1].t || 1;
+  const series = [
+    { nome: 'rms cru', cor: '#22d3ee', un: 'mg', get: (r) => r.rms },
+    { nome: 'rms filtrado', cor: '#fbbf24', un: 'mg', get: (r) => r.rmsF },
+    { nome: 'pico', cor: '#f472b6', un: 'Hz', get: (r) => (r.peaks[0] ? r.peaks[0].f : 0) },
+  ];
+
+  const x0 = 58, x1 = w - 8, y0 = 4, y1 = h - 16;
+  const laneH = (y1 - y0) / series.length;
+  const xOf = (t) => x0 + (t / tMax) * (x1 - x0);
+  ctx.font = '9px ui-monospace,monospace';
+
+  series.forEach((sr, k) => {
+    const top = y0 + laneH * k, cy = top + laneH / 2, half = laneH / 2 - 4;
+    let amp = 1e-6;
+    rows.forEach((r) => { amp = Math.max(amp, sr.get(r)); });
+    amp = niceCeil(amp * 1.1);
+
+    ctx.strokeStyle = '#1b2534'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x0, Math.round(top + laneH) + 0.5); ctx.lineTo(x1, Math.round(top + laneH) + 0.5);
+    ctx.stroke();
+
+    ctx.strokeStyle = sr.cor; ctx.lineWidth = 1.3; ctx.beginPath();
+    rows.forEach((r, i) => {
+      const x = xOf(r.t), y = top + laneH - 3 - (sr.get(r) / amp) * (half * 2 - 3);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    ctx.fillStyle = sr.cor; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(sr.nome, 5, cy - 5);
+    ctx.fillStyle = '#5b6c81';
+    ctx.fillText('máx ' + (amp >= 100 ? amp.toFixed(0) : amp.toFixed(1)) + ' ' + sr.un, 5, cy + 6);
+  });
+
+  // instante selecionado
+  const r = rows[+$('log-pos').value];
+  if (r) {
+    const x = Math.round(xOf(r.t)) + 0.5;
+    ctx.strokeStyle = 'rgba(244,114,182,.7)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
+  }
+
+  ctx.fillStyle = '#4d6076'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (const t of ticks(0, tMax, 6)) ctx.fillText(fmtDur(t), xOf(t), y1 + 3);
 }
 
 /* ===================================================== exportar codigo == */

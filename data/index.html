@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BMI323 · Analisador de Vibração</title>
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 
@@ -35,10 +35,19 @@
 <main>
   <section class="charts">
 
+    <div class="logbar" id="logbar" hidden>
+      <span class="tag alt">LOG</span>
+      <span class="lgname" id="log-name">—</span>
+      <input type="range" id="log-pos" min="0" max="0" step="1" value="0"
+             aria-label="instante do log">
+      <output class="lgt" id="log-t">—</output>
+      <button class="mini" id="bt-log-close">voltar ao vivo</button>
+    </div>
+
     <div class="panel">
       <div class="panel-head">
-        <h2>Leitura da IMU <small id="raw-span"></small></h2>
-        <div class="tools"><span class="hint">valor que sai do sensor, sem filtro</span></div>
+        <h2 id="raw-title">Leitura da IMU <small id="raw-span"></small></h2>
+        <div class="tools"><span class="hint" id="raw-hint">valor que sai do sensor, sem filtro</span></div>
       </div>
       <div class="axes" id="axes-row"></div>
       <div class="canvas-wrap"><canvas id="cv-raw"></canvas>
@@ -342,6 +351,13 @@
         <button class="btn" id="bt-code">Código C</button>
         <button class="btn" id="bt-save">Salvar na flash</button>
       </div>
+      <div class="btns">
+        <button class="btn" id="bt-log-rec">Gravar log</button>
+        <button class="btn" id="bt-log-save" disabled>Salvar log</button>
+        <button class="btn" id="bt-log-open">Abrir log</button>
+        <input type="file" id="log-file" accept=".json,application/json" hidden>
+      </div>
+      <p class="hint" id="log-stat">nenhum log gravado</p>
       <pre id="code-out" hidden></pre>
     </div>
 
@@ -349,6 +365,6 @@
   </aside>
 </main>
 
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>
