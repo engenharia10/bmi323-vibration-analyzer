@@ -1,0 +1,10 @@
+{
+  "name": "BMI323",
+  "version": "1.0.0",
+  "description": "Driver do IMU Bosch BMI323 (SPI ou I2C, registradores de 16 bits, FIFO)",
+  "keywords": ["bmi323", "imu", "acelerometro", "bosch", "vibracao"],
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "dependencies": [],
+  "build": { "srcFilter": ["+<*.cpp>"] }
+}

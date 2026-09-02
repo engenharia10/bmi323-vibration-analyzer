@@ -1,0 +1,10 @@
+{
+  "name": "Filtros",
+  "version": "1.0.0",
+  "description": "Cadeia de filtros do Betaflight portada: PT1/PT2/PT3, biquad, notch estatico e notch dinamico por SDFT",
+  "keywords": ["filtro", "biquad", "notch", "sdft", "betaflight", "dsp"],
+  "frameworks": "arduino",
+  "platforms": "*",
+  "license": "GPL-3.0-or-later",
+  "dependencies": []
+}

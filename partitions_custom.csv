@@ -1,0 +1,7 @@
+# Name,   Type, SubType, Offset,   Size,     Flags
+# O rotulo da particao de dados PRECISA ser "spiffs": e o label que o wrapper
+# LittleFS do Arduino-ESP32 procura por padrao em LittleFS.begin().
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xe000,   0x2000,
+app0,     app,  ota_0,   0x10000,  0x200000,
+spiffs,   data, spiffs,  0x210000, 0x1F0000,

@@ -1,0 +1,394 @@
+:root{
+  --bg:#080b10; --panel:#10151d; --panel2:#161d27; --line:#233040;
+  --txt:#dbe4ee; --dim:#7d8ea3; --raw:#22d3ee; --filt:#fbbf24; --resp:#f472b6;
+  --ok:#34d399; --bad:#f87171;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+/* .panel usa display:flex, que venceria o [hidden] da folha do navegador */
+[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+/* modo aplicacao: a pagina ocupa a viewport inteira e cada coluna rola sozinha */
+body{
+  background:
+    radial-gradient(1100px 600px at 12% -10%,#12202c 0%,transparent 60%),
+    var(--bg);
+  color:var(--txt);
+  font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+
+/* ---------------------------------------------------------------- topo */
+.bar{
+  flex:none;
+  display:flex;align-items:center;gap:24px;flex-wrap:wrap;
+  padding:12px 18px;border-bottom:1px solid var(--line);
+  background:rgba(8,11,16,.86);backdrop-filter:blur(8px);
+  position:sticky;top:0;z-index:20;
+}
+.brand{display:flex;align-items:center;gap:10px}
+.brand h1{font-size:15px;font-weight:650;margin:0;letter-spacing:.2px}
+.brand h1 span{color:var(--dim);font-weight:400}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 3px rgba(248,113,113,.15)}
+.dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(52,211,153,.15)}
+.mode{font:600 9px/1 var(--mono);letter-spacing:.12em;padding:4px 6px;border-radius:4px;
+  background:rgba(244,114,182,.15);color:var(--resp);border:1px solid rgba(244,114,182,.35)}
+.mode.off{background:rgba(248,113,113,.14);color:var(--bad);border-color:rgba(248,113,113,.35)}
+.mode.ser{background:rgba(52,211,153,.14);color:var(--ok);border-color:rgba(52,211,153,.35)}
+
+/* botao do enlace serial na barra de status */
+.topbtn{flex:none;font-size:11px;color:var(--dim);padding:5px 11px;border-radius:20px;
+  border:1px solid var(--line);background:var(--panel);cursor:pointer;
+  transition:color .12s,border-color .12s}
+.topbtn:hover{color:var(--txt);border-color:#3a4c62;background:var(--panel)}
+.topbtn.on{color:var(--ok);border-color:rgba(52,211,153,.45)}
+.topbtn.err{color:var(--bad);border-color:rgba(248,113,113,.45)}
+.topmsg{flex:none;max-width:340px;font:10.5px/1.3 var(--mono);color:var(--dim)}
+.topmsg.err{color:var(--bad)}
+.topmsg.ok{color:var(--ok)}
+
+/* interruptor do simulador na barra de status */
+.topsw{display:flex;align-items:center;gap:7px;flex:none;cursor:pointer;user-select:none;
+  font-size:11px;color:var(--dim);padding:4px 10px 4px 7px;border-radius:20px;
+  border:1px solid var(--line);background:var(--panel);transition:color .12s,border-color .12s}
+.topsw input{display:none}
+.topsw>input+span{width:28px;height:16px;border-radius:8px;background:var(--line);
+  position:relative;transition:background .15s;flex:none}
+.topsw>input+span::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;
+  border-radius:50%;background:#8397ac;transition:transform .15s,background .15s}
+.topsw>input:checked+span{background:rgba(244,114,182,.28)}
+.topsw>input:checked+span::after{transform:translateX(12px);background:var(--resp)}
+.topsw em{font-style:normal;letter-spacing:.02em}
+.topsw.on{color:var(--resp);border-color:rgba(244,114,182,.45)}
+
+.metrics{display:flex;gap:20px;flex-wrap:wrap;margin-left:auto}
+.metric{line-height:1.25}
+.metric label{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim)}
+.metric b{font:600 16px/1.2 var(--mono);font-variant-numeric:tabular-nums}
+.metric i{font-style:normal;font-size:10px;color:var(--dim);margin-left:3px}
+.metric.hl b{color:var(--filt)}
+
+/* -------------------------------------------------------------- layout */
+main{
+  flex:1;min-height:0;
+  display:grid;grid-template-columns:minmax(0,1fr) 344px;
+  gap:12px;padding:12px;
+}
+.charts{display:grid;grid-template-rows:1.35fr 1fr 1fr;gap:12px;min-height:0;min-width:0}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;min-height:0;min-width:0}
+.side{
+  display:flex;flex-direction:column;gap:12px;
+  min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-right:3px;
+}
+.side>.panel{flex:none}
+.side::-webkit-scrollbar{width:9px}
+.side::-webkit-scrollbar-track{background:transparent}
+.side::-webkit-scrollbar-thumb{background:#243141;border-radius:5px;border:2px solid var(--bg)}
+.side::-webkit-scrollbar-thumb:hover{background:#31435a}
+
+/* telas largas: a barra lateral vira duas colunas, o que corta a rolagem
+   pela metade (nao elimina: o conteudo somado passa de 1600px) */
+@media(min-width:1600px){
+  main{grid-template-columns:minmax(0,1fr) 690px}
+  /* Duas colunas com posicao fixa. O Simulador, que e o painel mais alto,
+     ocupa a coluna 2 ao lado de Picos + Filtros, o que equilibra as duas
+     sem deixar nenhum painel fora do alcance. */
+  .side{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:min-content;
+        align-content:start;padding-right:3px}
+  #p-peaks  {grid-column:1;grid-row:1}
+  #p-filters{grid-column:1;grid-row:2}
+  #p-export {grid-column:1;grid-row:3;align-self:start}
+  .foot     {grid-column:1;grid-row:4}
+  #p-sim    {grid-column:2;grid-row:1/span 2;align-self:start}
+  #p-acq    {grid-column:2;grid-row:3;align-self:start}
+  /* sem o simulador sobra espaco: Filtros ocupa a coluna 2 */
+  .side.no-sim #p-filters{grid-column:2;grid-row:1/span 3}
+  .side.no-sim #p-peaks  {grid-column:1;grid-row:1}
+  .side.no-sim #p-acq    {grid-column:1;grid-row:2;align-self:start}
+  .side.no-sim #p-export {grid-column:1;grid-row:3}
+  .side.no-sim .foot     {grid-column:1;grid-row:4}
+}
+
+/* tablet e celular: volta ao fluxo normal, tudo empilhado */
+@media(max-width:980px){
+  body{display:block;overflow:auto;height:auto}
+  main{display:block;padding:10px}
+  .charts,.row2,.side{display:block}
+  main>*>.panel,.side>.panel{margin-bottom:10px}
+  .row2>.panel:last-child{margin-bottom:0}
+}
+
+@media(max-width:700px){
+  .legend{max-width:calc(100% - 16px);gap:2px}
+  .legend .k{padding:2px 3px;font-size:8.5px;gap:2px;white-space:nowrap}
+  .legend .k::before{width:7px}
+  /* linha de pesos do RPM e a mais apertada da pagina em telas estreitas */
+  #f-rpmw0,#f-rpmw1,#f-rpmw2{max-width:none}
+  #o-rpmw{width:72px;font-size:10px}
+  .bar{gap:10px;padding:10px 12px}
+  .brand{width:100%}
+  .metrics{width:100%;margin-left:0;display:grid;grid-template-columns:repeat(3,1fr);gap:8px 12px}
+  .metric b{font-size:14px}
+  .panel-head{flex-wrap:wrap;row-gap:6px}
+  .tools{margin-left:0}
+  main{padding:8px}
+  .grid2{gap:8px;padding:10px}
+}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  display:flex;flex-direction:column;min-height:0}
+.panel-head{flex:none;display:flex;align-items:center;gap:12px;padding:9px 12px;border-bottom:1px solid var(--line);background:linear-gradient(#141b24,#10151d)}
+.panel-head h2{margin:0;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:#9fb2c7}
+.panel-head small{color:var(--dim);text-transform:none;letter-spacing:0;font-weight:400;margin-left:8px;font-family:var(--mono)}
+.tools{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sep{width:1px;height:16px;background:var(--line)}
+.hint{color:var(--dim);font-family:var(--mono);font-size:11px}
+
+/* ------------------------------------------------- leitura dos 6 eixos */
+.axes{flex:none;display:grid;grid-template-columns:repeat(6,1fr);gap:1px;
+  background:var(--line);border-bottom:1px solid var(--line)}
+.ax{background:#0d121a;padding:5px 8px;line-height:1.35;min-width:0}
+.ax b{display:block;font:600 9.5px/1 var(--mono);letter-spacing:.08em;color:var(--c)}
+.ax .v{display:block;font:600 14px/1.25 var(--mono);font-variant-numeric:tabular-nums;
+  color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ax .dc{display:block;font:11px/1.25 var(--mono);font-variant-numeric:tabular-nums;
+  color:var(--dim);white-space:nowrap}
+.ax i{font-style:normal;font-size:9.5px;color:#5b6c81;margin-left:2px}
+.ax.off{opacity:.5}
+@media(max-width:980px){
+  .axes{grid-template-columns:repeat(3,1fr)}
+}
+@media(max-width:560px){
+  .axes{grid-template-columns:repeat(2,1fr)}
+}
+
+/* --------------------------------------------------------------- canvas */
+.canvas-wrap{position:relative;flex:1;min-height:120px;padding:6px}
+/* atitude: instrumentos + 3 linhas de leitura no mesmo painel */
+#p-att .canvas-wrap{min-height:72px}
+#p-att{overflow-y:auto}
+@media(max-width:980px){
+  .canvas-wrap{flex:none;height:200px}
+}
+canvas{width:100%;height:100%;display:block}
+.legend{position:absolute;top:10px;right:14px;display:flex;gap:5px;flex-wrap:wrap;
+  justify-content:flex-end;max-width:70%}
+.k{display:flex;align-items:center;gap:4px;font:10.5px/1 var(--mono);cursor:pointer;
+  user-select:none;padding:3px 6px;border-radius:4px;background:rgba(10,14,20,.72);
+  border:1px solid var(--line);color:var(--dim);transition:color .12s,border-color .12s}
+.k::before{content:"";width:12px;height:2.5px;border-radius:2px;background:currentColor;opacity:.35}
+.k.on{color:var(--c);border-color:var(--c)}
+.k.on::before{opacity:1}
+.k.fixed{cursor:default}
+
+/* ------------------------------------------------------------ controles */
+.chk{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--dim);cursor:pointer;user-select:none}
+.chk input{accent-color:var(--raw);margin:0}
+.chk input:checked+span{color:var(--txt)}
+.inline{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--dim)}
+.inline input{width:64px}
+
+input[type=number],select{
+  background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+  border-radius:6px;padding:5px 7px;font:inherit;font-family:var(--mono);font-size:11.5px;
+}
+select{width:100%;cursor:pointer}
+input[type=number]:focus,select:focus{outline:1px solid var(--raw);border-color:var(--raw)}
+
+input[type=range]{
+  -webkit-appearance:none;appearance:none;height:3px;border-radius:3px;
+  background:var(--line);flex:1;min-width:0;max-width:340px;cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:13px;height:13px;border-radius:50%;
+  background:var(--raw);border:2px solid #0b1119;box-shadow:0 0 0 1px var(--raw);
+}
+input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:var(--raw);border:2px solid #0b1119}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:12px}
+.grid2 label{display:flex;flex-direction:column;gap:4px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim)}
+
+.fgroup{padding:10px 12px;border-bottom:1px solid var(--line)}
+.fgroup:last-child{border-bottom:0}
+.sw{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:500;cursor:pointer;user-select:none}
+.sw input{display:none}
+/* so o span imediatamente apos o input e o interruptor; os demais sao rotulos */
+.sw>input+span{width:30px;height:17px;border-radius:9px;background:var(--line);position:relative;transition:background .15s;flex:none}
+.sw>input+span::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#8397ac;transition:transform .15s,background .15s}
+.sw>input:checked+span{background:rgba(34,211,238,.28)}
+.sw>input:checked+span::after{transform:translateX(13px);background:var(--raw)}
+.ctl{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:11px;color:var(--dim)}
+.ctl>span{width:34px;flex:none}
+.ctl output{font-family:var(--mono);color:var(--txt);width:52px;text-align:right;font-size:11.5px;flex:none}
+#o-rpmw{width:80px;font-size:10.5px}
+/* os tres pesos dividem a mesma largura util das demais linhas de controle */
+#f-rpmw0,#f-rpmw1,#f-rpmw2{max-width:107px}
+.ctl i{font-style:normal;width:20px;color:var(--dim)}
+.fgroup.off .ctl{opacity:.35;pointer-events:none}
+
+.nlabel{display:flex;align-items:center;gap:8px;font-size:12px}
+.nlabel .tag{font:600 9.5px/1 var(--mono);letter-spacing:.08em;padding:3px 5px;border-radius:4px;background:var(--panel2);color:var(--dim);white-space:nowrap}
+.nlabel .tag.alt{background:rgba(244,114,182,.14);color:var(--resp)}
+.nlabel em{font-style:normal;font-size:10px;color:#5b6c81;font-family:var(--mono)}
+.nlabel .q{margin-left:auto;font:600 10.5px/1 var(--mono);color:var(--dim)}
+.fgroup.on .tag{background:rgba(251,191,36,.16);color:var(--filt)}
+.tsel{width:auto;padding:2px 5px;font-size:10px}
+.tsel.wide2{width:62px}
+.tsel.wide3{width:84px}
+.tsel.grow{flex:1;width:auto;min-width:0}
+.chk.pad{margin-top:9px}
+
+/* --------------------------------------------------------------- fontes */
+.src .nlabel{cursor:pointer}
+.src .more{display:none}
+.src.open .more{display:block}
+.src .chev{margin-left:auto;color:var(--dim);font-size:10px;transition:transform .15s}
+.src.open .chev{transform:rotate(90deg)}
+.src .live{font:600 10.5px/1 var(--mono);color:var(--ok);margin-left:auto;margin-right:8px}
+.src .rpm{width:66px;flex:none;padding:3px 5px;font-size:10.5px}
+.ctl .unit{font-style:normal;color:var(--dim);width:auto;flex:none;font-size:10px}
+.ctl>span.wide{width:66px}
+.ctl input[type=number]{width:62px;flex:none}
+.dynbox{display:none;margin-top:2px;padding-top:4px;border-top:1px dashed var(--line)}
+.fgroup.dyn .dynbox{display:block}
+.fgroup.dyn #ctl-l1s{display:none}
+
+/* diagrama da cadeia */
+/* lista de oscilacoes: a entrada principal do painel de filtros */
+.chipbox{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:9px;
+  border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:6px}
+.chipbox:focus-within{border-color:#3a4c62}
+.chipbox input[type=text]{flex:1;min-width:120px;border:0;background:none;outline:none;
+  padding:4px;font-family:var(--mono);font-size:11.5px;color:var(--txt)}
+.chipbox input[type=text]::placeholder{color:#4d6076}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 5px 4px 8px;border-radius:6px;
+  font:500 11.5px/1 var(--mono);font-variant-numeric:tabular-nums;
+  background:rgba(34,211,238,.13);color:var(--raw);border:1px solid rgba(34,211,238,.32)}
+.chip.drift{background:rgba(244,114,182,.13);color:var(--resp);border-color:rgba(244,114,182,.32)}
+.chip .q{font-size:10px;opacity:.72;cursor:pointer}
+.chip button{border:0;background:none;padding:0 2px;cursor:pointer;color:inherit;
+  font:600 12px/1 var(--mono);opacity:.55}
+.chip button:hover{opacity:1}
+.chip button:focus-visible{outline:1px solid currentColor;outline-offset:2px;border-radius:3px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:none;padding:4px 9px;cursor:pointer;
+  font:500 10.5px/1 var(--mono);color:var(--dim)}
+.seg button[aria-pressed="true"]{background:rgba(34,211,238,.14);color:var(--raw)}
+.seg button:focus-visible{outline:1px solid var(--raw);outline-offset:-2px}
+.ctl.tgopts{gap:10px}
+.ctl.tgopts>span:first-child{width:44px}
+#tg-plan b{color:var(--filt);font-weight:600}
+#tg-plan .warn{color:var(--bad)}
+
+/* o que a cadeia custa - sem isso o multiplicador global e so uma porcentagem */
+.cost{display:flex;border-bottom:1px solid var(--line);background:#0b1017}
+.cost>span{flex:1;padding:8px 12px;display:flex;align-items:baseline;gap:5px;
+  border-right:1px solid var(--line)}
+.cost>span:last-child{border-right:0}
+.cost b{font:600 14px/1 var(--mono);font-variant-numeric:tabular-nums}
+.cost i{font-style:normal;font-size:10px;color:var(--dim)}
+#o-cost-cut{color:var(--filt)}
+#o-cost-del{color:var(--raw)}
+#o-cost-n{color:var(--resp)}
+
+/* campo que substitui o output no clique: digitar vale mais que arrastar */
+.ctl output.editable{cursor:text;border-bottom:1px dashed transparent}
+.ctl output.editable:hover{border-bottom-color:#3a4c62}
+.ctl .numedit{width:52px;flex:none;text-align:right;padding:2px 5px;
+  font-family:var(--mono);font-size:11.5px;color:var(--txt);
+  background:var(--bg);border:1px solid var(--raw);border-radius:4px;outline:none}
+
+.chain{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--line);background:#0d121a}
+/* Cada estagio da cadeia e uma aba. Dois estados independentes convivem aqui:
+   ".on" diz que o estagio esta FAZENDO alguma coisa no sinal, e aria-selected
+   diz qual esta ABERTO para ajuste. Precisam ser visualmente distintos, senao
+   o usuario le "ligado" como "selecionado". */
+.chain .st{font:600 9px/1 var(--mono);letter-spacing:.06em;padding:4px 6px;border-radius:4px;
+  background:var(--panel2);color:#4d6076;border:1px solid transparent}
+.chain .st.on{background:rgba(251,191,36,.14);color:var(--filt);border-color:rgba(251,191,36,.3)}
+.chain .st.extra.on{background:rgba(244,114,182,.14);color:var(--resp);border-color:rgba(244,114,182,.3)}
+.chain .ar{color:#33445a;font-size:11px}
+.chain button.st{cursor:pointer;font-family:var(--mono);transition:color .12s,border-color .12s,box-shadow .12s}
+.chain button.st:hover{color:var(--txt);border-color:#3a4c62}
+.chain button.st:focus-visible{outline:1px solid var(--raw);outline-offset:2px}
+/* selecionado: preenchido e com marca embaixo, ligado ou nao */
+.chain button.st[aria-selected="true"]{background:#243040;color:var(--txt);
+  border-color:#4a5f78;box-shadow:0 2px 0 0 var(--raw)}
+.chain button.st.on[aria-selected="true"]{box-shadow:0 2px 0 0 var(--filt)}
+
+/* o grupo aberto perde a borda de baixo: ele e o unico visivel */
+.fstage{border-bottom:0}
+.tracking{margin-top:9px;padding:6px 8px;border-radius:6px;background:#0d121a;border:1px solid var(--line);
+  font:11px/1.4 var(--mono);color:var(--ok);text-align:center;letter-spacing:.02em}
+.tracking.idle{color:#4d6076}
+.tracking.note{margin:10px 12px 0;text-align:left;line-height:1.5;color:#8aa0b6;letter-spacing:0}
+
+/* --------------------------------------------- os tres niveis do painel */
+/* o que resolve fica sempre a vista; o jargao do Betaflight so quando pedido */
+  padding:9px 12px;background:#0d121a;
+  font:600 9.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:#9fb2c7}
+  font-size:12px;color:#4d6076;transition:transform .15s}
+  text-transform:none;color:#5b6c81}
+
+/* pontas do slider de intensidade, alinhadas com o trilho */
+/* abas: quem manda nos filtros - a lista de oscilacoes ou a mao do usuario.
+   A tira da cadeia e a linha de custo ficam FORA das abas de proposito: sao o
+   retorno do que esta valendo, e valem igual nos dois modos. */
+  font:600 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;
+  color:var(--dim);border-bottom:2px solid transparent;
+  transition:color .12s,border-color .12s}
+
+.ends{display:flex;justify-content:space-between;margin:6px 0 0 42px;padding-right:88px;
+  font:10px/1 var(--mono);color:#5b6c81}
+
+/* ------------------------------------------------------------- atitude */
+.att-read{flex:none;display:grid;grid-template-columns:repeat(4,1fr);gap:2px;
+  padding:5px 10px;border-top:1px solid var(--line);background:#0d121a}
+.att-read div{text-align:center;line-height:1.2}
+.att-read label{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.att-read b{font:600 14px/1.2 var(--mono);font-variant-numeric:tabular-nums}
+.att-read i{font-style:normal;font-size:9.5px;color:var(--dim);margin-left:1px}
+.att-rates{flex:none;padding:3px 10px 6px;text-align:center;background:#0d121a;
+  font:10px/1.25 var(--mono);color:var(--dim)}
+.att-rates.cal{color:var(--filt)}
+.att-rates.bad{color:var(--bad)}
+
+.trust-row{flex:none;display:flex;align-items:center;gap:8px;padding:0 10px 8px;background:#0d121a}
+.trust-row label{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);flex:none}
+.trust-row .tbar{flex:1;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.trust-row .tbar span{display:block;height:100%;width:0;border-radius:3px;
+  background:linear-gradient(90deg,#f87171,#fbbf24 45%,#34d399 75%);transition:width .2s}
+.trust-row b{font:600 11px/1 var(--mono);width:34px;text-align:right}
+
+/* ---------------------------------------------------------------- picos */
+.peaks{width:100%;border-collapse:collapse;font-size:11.5px}
+.peaks th{text-align:left;font-weight:500;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);padding:7px 12px;border-bottom:1px solid var(--line)}
+.peaks td{padding:6px 12px;border-bottom:1px solid #1a222c;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.peaks tr:last-child td{border-bottom:0}
+.peaks td:first-child{color:var(--dim);width:22px}
+.peaks .f{color:var(--raw)}
+/* pico que parou de ser detectado: some aos poucos em vez de piscar */
+.peaks tr.fading{opacity:.45;transition:opacity .3s}
+.peaks .empty td{color:var(--dim);text-align:center;font-family:inherit;padding:14px}
+.pk-btns{display:flex;gap:3px}
+
+button,.btn{
+  background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+  border-radius:7px;padding:7px 11px;font:inherit;font-size:11.5px;cursor:pointer;
+  text-decoration:none;text-align:center;transition:border-color .12s,background .12s;
+}
+button:hover,.btn:hover{border-color:#3a4c62;background:#1b2430}
+button:active{transform:translateY(1px)}
+.mini{padding:3px 7px;font-size:10.5px;border-radius:5px}
+.wide{display:block;width:calc(100% - 24px);margin:10px 12px 12px}
+.primary{background:linear-gradient(#0e7490,#0b5f78);border-color:#0e7490;color:#eafcff;font-weight:600}
+.primary:hover{background:linear-gradient(#0f8bad,#0b6d8a);border-color:#22d3ee}
+.btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:7px;padding:12px}
+.btns .btn{min-width:0;white-space:nowrap}
+
+pre#code-out{
+  margin:0;padding:12px;border-top:1px solid var(--line);background:#0a0e14;
+  font:11px/1.5 var(--mono);color:#a8d8e6;white-space:pre;overflow:auto;max-height:260px;
+}
+.foot{margin:2px 2px 8px;color:var(--dim);font-size:10.5px;font-family:var(--mono);text-align:right}

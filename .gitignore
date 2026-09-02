@@ -1,0 +1,8 @@
+.pio/
+.vscode/
+*.bin
+
+# Datasheet da Bosch: documento de terceiros, 2,5 MB. Fica de fora do repo
+# publico - o link para a fonte oficial esta no README.
+*.PDF
+*.pdf

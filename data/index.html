@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BMI323 · Analisador de Vibração</title>
+<link rel="stylesheet" href="style.css?v=8">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">
+    <span class="dot" id="link-dot"></span>
+    <h1>BMI323 <span>· analisador de vibração</span></h1>
+    <span class="mode" id="mode-badge" hidden></span>
+  </div>
+
+  <button class="topbtn" id="bt-serial"
+          title="lê a placa pela USB, sem depender da rede (Chrome/Edge, via localhost)">serial</button>
+  <span class="topmsg" id="serial-msg"></span>
+
+  <label class="topsw" id="sim-toggle" title="troca o sensor por vibração sintética">
+    <input type="checkbox" id="sim-on"><span></span><em>simulador</em>
+  </label>
+  <div class="metrics">
+    <div class="metric"><label>amostragem</label><b id="m-fs">—</b><i>Hz</i></div>
+    <div class="metric"><label>real</label><b id="m-meas">—</b><i>Hz</i></div>
+    <div class="metric"><label>RMS cru</label><b id="m-rms">—</b><i>mg</i></div>
+    <div class="metric hl"><label>RMS filtrado</label><b id="m-rmsf">—</b><i>mg</i></div>
+    <div class="metric"><label>pico a pico</label><b id="m-pkpk">—</b><i>mg</i></div>
+    <div class="metric"><label>temp</label><b id="m-temp">—</b><i>°C</i></div>
+  </div>
+</header>
+
+<main>
+  <section class="charts">
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Leitura da IMU <small id="raw-span"></small></h2>
+        <div class="tools"><span class="hint">valor que sai do sensor, sem filtro</span></div>
+      </div>
+      <div class="axes" id="axes-row"></div>
+      <div class="canvas-wrap"><canvas id="cv-raw"></canvas>
+        <div class="legend" id="legend"></div>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="panel">
+        <div class="panel-head"><h2>Waterfall <small id="res-note"></small></h2>
+          <div class="tools">
+            <label class="inline">até <input type="number" id="in-fmax" min="10" step="10" value="800"> Hz</label>
+            <button class="mini" id="bt-wf-clear">limpar</button>
+          </div>
+        </div>
+        <div class="canvas-wrap"><canvas id="cv-wf"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Forma de onda</h2>
+          <div class="tools"><span class="hint" id="scope-span"></span></div>
+        </div>
+        <div class="canvas-wrap"><canvas id="cv-scope"></canvas></div>
+      </div>
+
+    </div>
+
+    <div class="row2">
+      <div class="panel" id="p-fscope">
+        <div class="panel-head"><h2>Onda filtrada</h2>
+          <div class="tools"><span class="hint" id="fscope-span"></span></div>
+        </div>
+        <div class="canvas-wrap"><canvas id="cv-fscope"></canvas></div>
+      </div>
+
+      <div class="panel" id="p-att">
+        <div class="panel-head"><h2>Atitude</h2>
+          <div class="tools">
+            <button class="mini" id="bt-att-cal" title="deixe parado durante 1 s">calibrar</button>
+            <button class="mini" id="bt-att-zero">zerar yaw</button>
+          </div>
+        </div>
+        <div class="canvas-wrap"><canvas id="cv-att"></canvas></div>
+        <div class="att-read">
+          <div><label>roll</label><b id="a-roll">—</b><i>°</i></div>
+          <div><label>pitch</label><b id="a-pitch">—</b><i>°</i></div>
+          <div><label>yaw</label><b id="a-yaw">—</b><i>°</i></div>
+          <div><label>|a|</label><b id="a-g">—</b><i>g</i></div>
+        </div>
+        <div class="trust-row">
+          <label>confiança na gravidade</label>
+          <div class="tbar"><span id="a-trustbar"></span></div>
+          <b id="a-trust">—</b>
+        </div>
+        <div class="att-rates" id="a-rates">—</div>
+      </div>
+    </div>
+
+  </section>
+
+  <aside class="side">
+
+    <div class="panel" id="p-peaks">
+      <div class="panel-head"><h2>Picos detectados</h2></div>
+      <div class="peaks-wrap">
+        <table class="peaks">
+          <thead><tr><th>#</th><th>frequência</th><th>amplitude</th><th></th></tr></thead>
+          <tbody id="peak-rows"><tr class="empty"><td colspan="4">aguardando sinal…</td></tr></tbody>
+        </table>
+      </div>
+      <button class="wide primary" id="bt-auto">Filtrar os dois maiores picos</button>
+    </div>
+
+    <div class="panel" id="p-sim">
+      <div class="panel-head"><h2>Simulador</h2>
+        <div class="tools">
+          <span class="hint" id="sim-note"></span>
+        </div>
+      </div>
+
+      <div class="fgroup">
+        <div class="ctl"><span class="wide">montagem</span>
+          <select class="tsel grow" id="sim-preset">
+            <option value="drone5">Drone 5" · 4 motores</option>
+            <option value="drone7">Drone 7" · 4 motores</option>
+            <option value="motor4p">Motor elétrico · 4 polos / 60 Hz</option>
+            <option value="fan">Ventilador axial · 5 pás</option>
+            <option value="pump">Bomba / compressor</option>
+            <option value="unbal">Desbalanceamento simples</option>
+            <option value="sweep">Varredura · motor acelerando</option>
+            <option value="custom">Personalizado</option>
+          </select>
+          <button class="mini" id="sim-apply">aplicar</button>
+        </div>
+        <div class="ctl"><span>ruído</span><input type="range" id="sim-noise" min="0" max="30" step="0.5"><output id="o-simnoise"></output><i>mg</i></div>
+        <label class="chk pad"><input type="checkbox" id="sim-grav"><span>gravidade: 1 g fixo em Z</span></label>
+      </div>
+
+      <div class="fgroup" id="g-load">
+        <div class="nlabel"><span class="tag">CARGA</span><em>acelerador · dirige o LPF1 dinâmico</em></div>
+        <div class="ctl"><span>carga</span><input type="range" id="f-load" min="0" max="100" step="1"><output id="o-load"></output><i>%</i></div>
+      </div>
+
+      <div class="fgroup" id="g-simres">
+        <label class="sw nlabel"><input type="checkbox" id="sim-reson"><span></span>
+          <span class="tag">RESSONÂNCIA</span><em>fixação / estrutura</em></label>
+        <div class="ctl"><span>freq</span><input type="range" id="sim-resf" min="10" max="800" step="5"><output id="o-simresf"></output><i>Hz</i></div>
+        <div class="ctl"><span>Q</span><input type="range" id="sim-resq" min="0.5" max="20" step="0.5"><output id="o-simresq"></output></div>
+        <div class="ctl"><span>ganho</span><input type="range" id="sim-resg" min="0" max="30" step="1"><output id="o-simresg"></output><i>dB</i></div>
+      </div>
+
+      <div class="fgroup" id="g-simatt">
+        <label class="sw nlabel"><input type="checkbox" id="sim-att"><span></span>
+          <span class="tag">MOVIMENTO</span><em>alimenta a janela de atitude</em></label>
+        <div class="ctl"><span>roll</span><input type="range" id="sim-roll" min="0" max="60" step="1"><output id="o-simroll"></output><i>°</i></div>
+        <div class="ctl"><span>pitch</span><input type="range" id="sim-pitch" min="0" max="60" step="1"><output id="o-simpitch"></output><i>°</i></div>
+        <div class="ctl"><span>período</span><input type="range" id="sim-attp" min="1" max="30" step="0.5"><output id="o-simattp"></output><i>s</i></div>
+        <div class="ctl"><span>yaw</span><input type="range" id="sim-yaw" min="-180" max="180" step="5"><output id="o-simyaw"></output><i>°/s</i></div>
+      </div>
+
+      <div id="sim-sources"></div>
+    </div>
+
+    <div class="panel" id="p-filters">
+      <div class="panel-head"><h2>Filtros <small>cadeia Betaflight</small></h2>
+        <div class="tools"><button class="mini" id="bt-clear-filters">zerar</button></div>
+      </div>
+
+      <div class="fgroup" id="g-targets">
+        <div class="nlabel"><span class="tag alt">OSCILAÇÕES</span>
+          <em>diga a frequência; a cadeia se monta sozinha</em></div>
+        <div class="chipbox" id="tg-box">
+          <input type="text" id="tg-in" inputmode="decimal" autocomplete="off"
+                 placeholder="118,4   ou 118 236 354   ou clique num pico">
+        </div>
+        <div class="ctl tgopts">
+          <span>largura</span>
+          <span class="seg" id="tg-width" role="group" aria-label="largura dos filtros novos">
+            <button type="button" data-q="5">estreita</button>
+            <button type="button" data-q="3" aria-pressed="true">média</button>
+            <button type="button" data-q="1.5">larga</button>
+          </span>
+          <label class="chk"><input type="checkbox" id="tg-drift"><span>varia</span></label>
+        </div>
+        <div class="tracking" id="tg-plan">—</div>
+      </div>
+
+      <div class="fgroup" id="g-mult">
+        <div class="nlabel"><span class="tag alt">INTENSIDADE</span><em>menos ou mais filtro na cadeia toda</em></div>
+        <div class="ctl"><span>×</span><input type="range" id="f-mult" min="25" max="200" step="5" aria-label="intensidade do filtro"><output id="o-mult"></output><i>%</i></div>
+        <div class="ends"><span>menos filtro</span><span>mais filtro</span></div>
+      </div>
+
+      <div class="cost" title="atraso de grupo em DC da cadeia, sem o DC-block">
+        <span><b id="o-cost-cut">—</b><i>Hz corte</i></span>
+        <span><b id="o-cost-del">—</b><i>ms atraso</i></span>
+        <span><b id="o-cost-n">—</b><i>cortes</i></span>
+      </div>
+
+      <div class="chain" role="tablist" aria-label="estágios da cadeia; escolha qual ajustar">
+        <button type="button" class="st extra" id="st-dc" role="tab" aria-controls="g-dc"
+                title="tira o nível constante do sinal">DC</button><span class="ar">›</span>
+        <button type="button" class="st" id="st-lpf2" role="tab" aria-controls="g-lpf2"
+                title="suavização de entrada">LPF2</button><span class="ar">›</span>
+        <button type="button" class="st" id="st-rpm" role="tab" aria-controls="g-rpm"
+                title="família harmônica do motor">RPM</button><span class="ar">›</span>
+        <button type="button" class="st" id="st-n1" role="tab" aria-controls="g-n1"
+                title="corte fixo 1">N1</button><span class="ar">›</span>
+        <button type="button" class="st" id="st-n2" role="tab" aria-controls="g-n2"
+                title="corte fixo 2">N2</button><span class="ar">›</span>
+        <button type="button" class="st" id="st-lpf1" role="tab" aria-controls="g-lpf1"
+                title="suavização de saída">LPF1</button><span class="ar">›</span>
+        <button type="button" class="st" id="st-dyn" role="tab" aria-controls="g-dyn"
+                title="cortes que perseguem a frequência">DYN</button>
+      </div>
+
+      <div class="tracking note" id="tg-owned" hidden>Este estágio é montado pela lista de OSCILAÇÕES. Editar aqui vale até a próxima mudança na lista — ela sobrescreve o que você mexer.</div>
+        <div class="fgroup fstage" id="g-lpf1" role="tabpanel" aria-labelledby="st-lpf1" hidden>
+          <div class="nlabel"><span class="tag">LPF 1</span>
+            <select class="tsel" id="f-lpf1t"><option value="0">PT1</option><option value="1">BIQUAD</option><option value="2">PT2</option><option value="3">PT3</option></select>
+            <label class="chk"><input type="checkbox" id="f-lpf1dyn"><span>dinâmico</span></label></div>
+          <div class="ctl" id="ctl-l1s"><span>corte</span><input type="range" id="f-lpf1f" min="0" max="800" step="5"><output id="o-lpf1f"></output><i>Hz</i></div>
+          <div class="dynbox" id="box-l1d">
+            <div class="ctl"><span>mín</span><input type="range" id="f-l1dmin" min="0" max="800" step="5"><output id="o-l1dmin"></output><i>Hz</i></div>
+            <div class="ctl"><span>máx</span><input type="range" id="f-l1dmax" min="0" max="800" step="5"><output id="o-l1dmax"></output><i>Hz</i></div>
+            <div class="ctl"><span>expo</span><input type="range" id="f-l1dexp" min="0" max="10" step="1"><output id="o-l1dexp"></output></div>
+            <div class="tracking" id="l1-track">—</div>
+          </div>
+        </div>
+        <div class="fgroup fstage" id="g-lpf2" role="tabpanel" aria-labelledby="st-lpf2" hidden>
+          <div class="nlabel"><span class="tag">LPF 2</span>
+            <select class="tsel" id="f-lpf2t"><option value="0">PT1</option><option value="1">BIQUAD</option><option value="2">PT2</option><option value="3">PT3</option></select>
+            <em>gyro_lpf2</em></div>
+          <div class="ctl"><span>corte</span><input type="range" id="f-lpf2f" min="0" max="800" step="5"><output id="o-lpf2f"></output><i>Hz</i></div>
+        </div>
+        <div class="fgroup fstage" id="g-dc" role="tabpanel" aria-labelledby="st-dc" hidden>
+          <label class="sw nlabel"><input type="checkbox" id="f-dc"><span></span>
+            <span class="tag alt">DC-BLOCK</span><em>fora do Betaflight</em></label>
+          <div class="ctl"><span>corte</span><input type="range" id="f-dcf" min="0.5" max="20" step="0.5"><output id="o-dcf"></output><i>Hz</i></div>
+        </div>
+        <div class="fgroup fstage" id="g-rpm" role="tabpanel" aria-labelledby="st-rpm" hidden>
+          <div class="nlabel"><span class="tag">RPM</span>
+            <select class="tsel wide3" id="f-rpmsrc"><option value="0">off</option><option value="1">manual</option><option value="2">auto (pico)</option></select>
+            <em>rpm_filter</em></div>
+          <div class="ctl" id="ctl-rpmbase"><span>base</span><input type="range" id="f-rpmbase" min="5" max="800" step="0.1"><output id="o-rpmbase"></output><i>Hz</i></div>
+          <div class="ctl"><span class="wide">harmônicas</span>
+            <select class="tsel" id="f-rpmharm"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+            <span style="width:auto">Q</span><input type="number" id="f-rpmq" min="250" max="3000" step="50"><b class="q" id="o-rpmq"></b>
+          </div>
+          <div class="ctl"><span>mín</span><input type="range" id="f-rpmmin" min="5" max="200" step="5"><output id="o-rpmmin"></output><i>Hz</i></div>
+          <div class="ctl"><span>fade</span><input type="range" id="f-rpmfade" min="0" max="300" step="5"><output id="o-rpmfade"></output><i>Hz</i></div>
+          <div class="ctl" title="rpm_filter_lpf_hz - suaviza a fundamental antes de mexer nos notches; 0 desliga"><span>suav.</span><input type="range" id="f-rpmlpf" min="0" max="500" step="5"><output id="o-rpmlpf"></output><i>Hz</i></div>
+          <div class="ctl"><span>peso</span>
+            <input type="range" id="f-rpmw0" min="0" max="100" step="5" title="1ª harmônica">
+            <input type="range" id="f-rpmw1" min="0" max="100" step="5" title="2ª harmônica">
+            <input type="range" id="f-rpmw2" min="0" max="100" step="5" title="3ª harmônica">
+            <output id="o-rpmw" data-noedit></output>
+          </div>
+          <div class="tracking" id="rpm-track">—</div>
+        </div>
+        <div class="fgroup fstage" id="g-n1" role="tabpanel" aria-labelledby="st-n1" hidden>
+          <div class="nlabel"><span class="tag">NOTCH 1</span><em>gyro_notch1</em><b class="q" id="o-q1"></b></div>
+          <div class="ctl"><span>centro</span><input type="range" id="f-n1h" min="0" max="800" step="0.1"><output id="o-n1h"></output><i>Hz</i></div>
+          <div class="ctl"><span>corte</span><input type="range" id="f-n1c" min="0" max="800" step="0.1"><output id="o-n1c"></output><i>Hz</i></div>
+        </div>
+        <div class="fgroup fstage" id="g-n2" role="tabpanel" aria-labelledby="st-n2" hidden>
+          <div class="nlabel"><span class="tag">NOTCH 2</span><em>gyro_notch2</em><b class="q" id="o-q2"></b></div>
+          <div class="ctl"><span>centro</span><input type="range" id="f-n2h" min="0" max="800" step="0.1"><output id="o-n2h"></output><i>Hz</i></div>
+          <div class="ctl"><span>corte</span><input type="range" id="f-n2c" min="0" max="800" step="0.1"><output id="o-n2c"></output><i>Hz</i></div>
+        </div>
+        <div class="fgroup fstage" id="g-dyn" role="tabpanel" aria-labelledby="st-dyn" hidden>
+          <div class="nlabel"><span class="tag">NOTCH DINÂMICO</span><em>SDFT · dyn_notch</em></div>
+          <div class="ctl"><span>qtd</span>
+            <select class="tsel wide2" id="f-dnc"><option value="0">off</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+            <span style="width:auto">Q</span><input type="number" id="f-dnq" min="1" max="1000" step="10"><b class="q" id="o-dnq"></b>
+          </div>
+          <div class="ctl"><span>mín</span><input type="range" id="f-dnmin" min="20" max="250" step="5"><output id="o-dnmin"></output><i>Hz</i></div>
+          <div class="ctl"><span>máx</span><input type="range" id="f-dnmax" min="100" max="1000" step="10"><output id="o-dnmax"></output><i>Hz</i></div>
+          <div class="tracking" id="dyn-track">—</div>
+        </div>
+    </div>
+
+    <div class="panel" id="p-acq">
+      <div class="panel-head"><h2>Aquisição</h2></div>
+      <div class="grid2">
+        <label>Eixo
+          <select id="s-axis"><option value="0">acel X</option><option value="1">acel Y</option><option value="2">acel Z</option><option value="3">giro X</option><option value="4">giro Y</option><option value="5">giro Z</option><option value="6">módulo acel</option></select>
+        </label>
+        <label>ODR
+          <select id="s-odr">
+            <option value="100">100 Hz</option><option value="200">200 Hz</option>
+            <option value="400">400 Hz</option><option value="800">800 Hz</option>
+            <option value="1600">1.6 kHz</option><option value="3200">3.2 kHz</option>
+            <option value="6400">6.4 kHz</option>
+          </select>
+        </label>
+        <label>Fundo de escala
+          <select id="s-range"><option value="2">±2 g</option><option value="4">±4 g</option><option value="8">±8 g</option><option value="16">±16 g</option></select>
+        </label>
+        <label>Média HW
+          <select id="s-avg"><option value="0">off</option><option value="1">2×</option><option value="2">4×</option><option value="3">8×</option><option value="4">16×</option></select>
+        </label>
+        <label>Largura de banda
+          <select id="s-bw"><option value="0">ODR/2</option><option value="1">ODR/4</option></select>
+        </label>
+        <label>Giroscópio
+          <select id="s-gyro"><option value="1">ligado</option><option value="0">desligado</option></select>
+        </label>
+        <label>Fundo de escala giro
+          <select id="s-gyrrange"><option value="125">±125 °/s</option><option value="250">±250 °/s</option><option value="500">±500 °/s</option><option value="1000">±1000 °/s</option><option value="2000">±2000 °/s</option></select>
+        </label>
+        <label>FFT
+          <select id="s-fft"><option value="256">256</option><option value="512">512</option><option value="1024">1024</option></select>
+        </label>
+        <label>Janela
+          <select id="s-win"><option value="0">retangular</option><option value="1">Hann</option><option value="2">Hamming</option><option value="3">Blackman</option><option value="4">flat-top</option></select>
+        </label>
+        <label title="de onde vem o sinal que alimenta pitch/roll/yaw">Fonte da atitude
+          <select id="s-attsrc">
+            <option value="0">cru</option>
+            <option value="1">giro filtrado</option>
+            <option value="2">tudo filtrado</option>
+          </select>
+        </label>
+        <label title="corte do passa-baixa que isola a gravidade da vibração">LPF gravidade
+          <input type="number" id="s-attlpf" min="0.2" max="40" step="0.5">
+        </label>
+        <label title="ganho do filtro complementar: maior = segue o acelerômetro mais rápido">Resposta (kp)
+          <input type="number" id="s-attkp" min="0.05" max="10" step="0.05">
+        </label>
+        <label>Suavização
+          <select id="s-alpha"><option value="1">nenhuma</option><option value="0.6">leve</option><option value="0.35">média</option><option value="0.15">forte</option><option value="0.07">máxima</option></select>
+        </label>
+      </div>
+    </div>
+
+    <div class="panel" id="p-export">
+      <div class="panel-head"><h2>Exportar</h2></div>
+      <div class="btns">
+        <a class="btn" id="bt-csv" href="api/csv" download>Baixar CSV</a>
+        <button class="btn" id="bt-code">Código C</button>
+        <button class="btn" id="bt-save">Salvar na flash</button>
+      </div>
+      <pre id="code-out" hidden></pre>
+    </div>
+
+    <p class="foot">heap <span id="m-heap">—</span> · frames descartados <span id="m-drop">0</span></p>
+  </aside>
+</main>
+
+<script src="app.js?v=8"></script>
+</body>
+</html>

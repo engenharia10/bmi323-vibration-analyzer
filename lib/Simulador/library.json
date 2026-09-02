@@ -1,0 +1,9 @@
+{
+  "name": "Simulador",
+  "version": "1.0.0",
+  "description": "Gerador de vibracao sintetica: fontes multi-harmonicas com drift e jitter, ressonancia estrutural e ruido de fundo",
+  "keywords": ["simulacao", "vibracao", "dsp", "gerador"],
+  "frameworks": "arduino",
+  "platforms": "*",
+  "dependencies": [{ "name": "Filtros" }]
+}
