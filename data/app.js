@@ -1204,10 +1204,11 @@ function wire() {
 /* Gravar a sessao e reabrir depois. Fica tudo no navegador: a flash do ESP32
    mal cabe a interface, e o PC tem disco de sobra.
 
-   Uma linha por mensagem de status (1 Hz) com os escalares, a leitura dos 6
-   eixos e o espectro do canal em detalhe. 512 bins arredondados dao ~3 kB por
-   linha, entao 10 min de gravacao ficam perto de 2 MB - grande, mas e o que
-   permite reconstruir o waterfall inteiro depois. */
+   Uma linha por mensagem de status, que sai junto do quadro de espectro - ou
+   seja ~5 Hz, nao 1 Hz - com os escalares, a leitura dos 6 eixos e o espectro
+   do canal em detalhe. 512 bins arredondados dao 3350 B por linha (medido),
+   entao 1 min fica perto de 1 MB. E o espectro que pesa, e e justamente ele
+   que permite reconstruir o waterfall inteiro depois. */
 
 const LOG = {
   rec: false,          // gravando
@@ -1409,11 +1410,15 @@ function drawTrend() {
   const xOf = (t) => x0 + (t / tMax) * (x1 - x0);
   ctx.font = '9px ui-monospace,monospace';
 
+  const faixas = [];
   series.forEach((sr, k) => {
     const top = y0 + laneH * k, cy = top + laneH / 2, half = laneH / 2 - 4;
     let amp = 1e-6;
     rows.forEach((r) => { amp = Math.max(amp, sr.get(r)); });
     amp = niceCeil(amp * 1.1);
+    // guardada para o marcador do cursor cair exatamente sobre a curva
+    const yOf = (v) => top + laneH - 3 - (v / amp) * (half * 2 - 3);
+    faixas.push({ sr, yOf });
 
     ctx.strokeStyle = '#1b2534'; ctx.lineWidth = 1;
     ctx.beginPath();
@@ -1422,8 +1427,8 @@ function drawTrend() {
 
     ctx.strokeStyle = sr.cor; ctx.lineWidth = 1.3; ctx.beginPath();
     rows.forEach((r, i) => {
-      const x = xOf(r.t), y = top + laneH - 3 - (sr.get(r) / amp) * (half * 2 - 3);
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      const x = xOf(r.t);
+      i === 0 ? ctx.moveTo(x, yOf(sr.get(r))) : ctx.lineTo(x, yOf(sr.get(r)));
     });
     ctx.stroke();
 
@@ -1433,12 +1438,49 @@ function drawTrend() {
     ctx.fillText('máx ' + (amp >= 100 ? amp.toFixed(0) : amp.toFixed(1)) + ' ' + sr.un, 5, cy + 6);
   });
 
-  // instante selecionado
+  // ---- instante selecionado: linha, marcador em cada curva e a leitura
   const r = rows[+$('log-pos').value];
   if (r) {
     const x = Math.round(xOf(r.t)) + 0.5;
-    ctx.strokeStyle = 'rgba(244,114,182,.7)'; ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(244,114,182,.75)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
+
+    faixas.forEach((f) => {
+      const y = f.yOf(f.sr.get(r));
+      ctx.beginPath(); ctx.arc(x, y, 3, 0, 7);
+      ctx.fillStyle = f.sr.cor; ctx.fill();
+      ctx.strokeStyle = '#0a0e14'; ctx.lineWidth = 1.4; ctx.stroke();
+    });
+
+    // a janela com os numeros daquele ponto: a curva diz a forma, isto diz o valor
+    const linhas = [
+      ['tempo', fmtDur(r.t), '#f472b6'],
+      ['rms cru', r.rms.toFixed(2) + ' mg', '#22d3ee'],
+      ['rms filt', r.rmsF.toFixed(2) + ' mg', '#fbbf24'],
+      ['pico', r.peaks[0] ? r.peaks[0].f.toFixed(1) + ' Hz' : '—', '#f472b6'],
+      ['temp', r.temp.toFixed(1) + ' °C', '#7d8ea3'],
+    ];
+    ctx.font = '10px ui-monospace,monospace';
+    const wRot = Math.max.apply(null, linhas.map((l) => ctx.measureText(l[0]).width));
+    const wVal = Math.max.apply(null, linhas.map((l) => ctx.measureText(l[1]).width));
+    const bw = wRot + wVal + 38, bh = linhas.length * 13 + 11;
+    // vira para o outro lado quando nao cabe a direita do cursor
+    const bx = (x + 12 + bw <= x1) ? x + 12 : x - 12 - bw;
+    const by = Math.max(y0, Math.min(y0 + 3, y1 - bh));
+
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 6); else ctx.rect(bx, by, bw, bh);
+    ctx.fillStyle = 'rgba(11,17,25,.94)'; ctx.fill();
+    ctx.strokeStyle = '#2b3a4d'; ctx.lineWidth = 1; ctx.stroke();
+
+    ctx.textBaseline = 'middle';
+    linhas.forEach((l, i) => {
+      const ly = by + 11 + i * 13;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#5b6c81'; ctx.fillText(l[0], bx + 10, ly);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = l[2]; ctx.fillText(l[1], bx + bw - 10, ly);
+    });
   }
 
   ctx.fillStyle = '#4d6076'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
