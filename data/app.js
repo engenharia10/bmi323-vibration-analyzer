@@ -13,21 +13,22 @@ const PEAK_HOLD_MS = 1000;
 
 // Os 6 canais da IMU. A cor vale para o espectro, para a legenda e para as
 // faixas da janela de onda filtrada.
-// Seis matizes a 60 graus de distancia em Lab, escolhidos por otimizacao e nao
-// no olho: com as ondas sobrepostas a cor e a UNICA coisa que separa um eixo do
-// outro. A distancia perceptual minima entre pares subiu de 42 para 54 (CIE76)
-// e todos passam de 5,5:1 de contraste sobre o fundo do painel.
+// X vermelho, Y verde, Z azul - a convencao de eixos que todo mundo ja le sem
+// legenda. Como as ondas sobrepostas agrupam por UNIDADE, cada faixa tem so
+// tres cores, e tres matizes a 120 graus e o melhor caso possivel.
 //
-// A familia tambem virou informacao: acelerometro nos frios (verde, ciano,
-// azul) e giroscopio nos quentes (laranja, amarelo, magenta) - o mesmo
-// agrupamento por unidade que as faixas usam quando sobrepostas.
+// Entao o matiz diz o EIXO e o brilho diz o SENSOR: acelerometro nos tons
+// cheios, giroscopio nos claros do mesmo matiz. As luminosidades sairam de
+// otimizacao - 48 de separacao dentro da faixa (a paleta antiga tinha 42) e
+// 48 entre acelerometro e giroscopio no mesmo eixo, com todos acima de 5:1
+// de contraste sobre o fundo do painel.
 const CH = [
-  { id: 'aX', label: 'acel X', color: '#41d3f1', unit: 'mg' },
-  { id: 'aY', label: 'acel Y', color: '#41f1b0', unit: 'mg' },
-  { id: 'aZ', label: 'acel Z', color: '#5e8ff3', unit: 'mg' },
-  { id: 'gX', label: 'giro X', color: '#f17041', unit: '\u00b0/s' },
-  { id: 'gY', label: 'giro Y', color: '#f1f141', unit: '\u00b0/s' },
-  { id: 'gZ', label: 'giro Z', color: '#f141c8', unit: '\u00b0/s' },
+  { id: 'aX', label: 'acel X', color: '#ff3333', unit: 'mg' },
+  { id: 'aY', label: 'acel Y', color: '#33ff77', unit: 'mg' },
+  { id: 'aZ', label: 'acel Z', color: '#3385ff', unit: 'mg' },
+  { id: 'gX', label: 'giro X', color: '#e99b9b', unit: '\u00b0/s' },
+  { id: 'gY', label: 'giro Y', color: '#9be9b5', unit: '\u00b0/s' },
+  { id: 'gZ', label: 'giro Z', color: '#9bbae9', unit: '\u00b0/s' },
 ];
 
 const S = {
