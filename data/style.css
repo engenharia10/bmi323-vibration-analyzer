@@ -419,6 +419,9 @@ button,.btn{
 button:hover,.btn:hover{border-color:#3a4c62;background:#1b2430}
 button:active{transform:translateY(1px)}
 .mini{padding:3px 7px;font-size:10.5px;border-radius:5px}
+/* o guia e um link, nao um botao, mas na barra de ferramentas os dois
+   precisam ser a mesma coisa aos olhos */
+a.mini{text-decoration:none;display:inline-block;line-height:1.45}
 .wide{display:block;width:calc(100% - 24px);margin:10px 12px 12px}
 .primary{background:linear-gradient(#0e7490,#0b5f78);border-color:#0e7490;color:#eafcff;font-weight:600}
 .primary:hover{background:linear-gradient(#0f8bad,#0b6d8a);border-color:#22d3ee}

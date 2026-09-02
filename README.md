@@ -264,6 +264,22 @@ A ordem é a mesma do `gyro_filter_impl.c`:
 Filtro de hardware do sensor (`gyro_hardware_lpf`) fica no painel **Aquisição**:
 largura de banda ODR/2 ou ODR/4 e média por hardware.
 
+### Guia de ajuste
+
+`guia-filtros.html`, na raiz do repositório, documenta os sete estágios um por
+um: o que cada um faz no sinal, quando vale mexer, o que digitar, e quanto de
+atraso custa. As curvas de resposta são calculadas em tempo de carga com as
+mesmas fórmulas de `bf_filter.cpp`, a 1600 Hz — não são figuras. Tem também um
+laboratório interativo que mostra a curva da cadeia e o atraso de grupo
+mudando juntos.
+
+Abra o arquivo no navegador, ou pelo endereço publicado:
+[engenharia10.github.io/bmi323-vibration-analyzer/guia-filtros.html](https://engenharia10.github.io/bmi323-vibration-analyzer/guia-filtros.html)
+— o workflow do Pages copia a raiz para o site, porque o GitHub não renderiza
+HTML no navegador de arquivos. O link **guia** no cabeçalho do painel de
+filtros aponta para esse endereço, e por isso precisa de internet: o arquivo
+não está mais no LittleFS da placa.
+
 Todo valor ao lado de um slider aceita clique para digitar (Enter confirma,
 Esc cancela) — é o único jeito de cravar os 118,4 Hz que o analisador mediu.
 

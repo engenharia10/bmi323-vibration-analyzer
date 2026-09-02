@@ -28,6 +28,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      # O guia mora na raiz do repo, nao em data/ - e o GitHub nao renderiza
+      # HTML no navegador de arquivos, so mostra o fonte. Copiar para o site
+      # publicado e o que lhe da um endereco onde ele abre de verdade.
+      - run: cp guia-filtros.html data/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: data

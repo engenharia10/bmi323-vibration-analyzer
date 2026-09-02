@@ -1,0 +1,889 @@
+<title>Ajuste dos Filtros do BMI323</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@500;600;700&family=Asap:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+/* ------------------------------------------------------------------ tokens */
+:root{
+  --bg:#f0f2f4; --surf:#ffffff; --surf2:#e7ebef; --line:#d6dce2; --line2:#bcc5cf;
+  --ink:#131a22; --dim:#57646f;
+  --acc:#0d7490; --acc2:#8f5504; --bad:#a92218;
+  --disp:"Chivo",ui-sans-serif,system-ui,sans-serif;
+  --body:"Asap",ui-sans-serif,system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b0f14; --surf:#131922; --surf2:#0f151d; --line:#243040; --line2:#31404f;
+    --ink:#dde5ee; --dim:#8496a9;
+    --acc:#22d3ee; --acc2:#fbbf24; --bad:#f87171;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f14; --surf:#131922; --surf2:#0f151d; --line:#243040; --line2:#31404f;
+  --ink:#dde5ee; --dim:#8496a9;
+  --acc:#22d3ee; --acc2:#fbbf24; --bad:#f87171;
+}
+/* O "aparelho" e sempre escuro: estes blocos sao a tela do analisador, e ela
+   nao muda de tema. Tokens proprios, fixos, tirados de data/style.css. */
+:root{
+  --d-bg:#080b10; --d-panel:#10151d; --d-panel2:#161d27; --d-line:#233040;
+  --d-txt:#dbe4ee; --d-dim:#7d8ea3; --d-raw:#22d3ee; --d-filt:#fbbf24; --d-resp:#f472b6;
+  --ax:#ff3333; --ay:#33ff77; --az:#3385ff;
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:16px/1.62 var(--body);
+  -webkit-font-smoothing:antialiased;padding:0 20px 100px}
+
+/* ------------------------------------------------------------------ layout */
+.wrap{max-width:1120px;margin:0 auto}
+.col{max-width:66ch}
+h1,h2,h3{font-family:var(--disp);text-wrap:balance;margin:0}
+h1{font-size:clamp(31px,4.6vw,50px);font-weight:700;letter-spacing:-.022em;line-height:1.06}
+h2{font-size:clamp(21px,2.6vw,27px);font-weight:600;letter-spacing:-.014em;line-height:1.2}
+h3{font-size:16px;font-weight:600;letter-spacing:.005em}
+p{margin:13px 0}
+a{color:var(--acc)}
+code{font:500 .87em/1.4 var(--mono);background:var(--surf2);border:1px solid var(--line);
+  border-radius:4px;padding:1px 5px}
+.eyebrow{font:600 10.5px/1 var(--mono);letter-spacing:.17em;text-transform:uppercase;
+  color:var(--dim);margin:0 0 12px}
+.lede{font-size:18.5px;line-height:1.55;color:var(--dim)}
+.note{font-size:14px;color:var(--dim)}
+
+header{padding:64px 0 0}
+.meta{display:flex;gap:26px;flex-wrap:wrap;margin-top:26px;padding-top:22px;
+  border-top:1px solid var(--line);font:500 12px/1.45 var(--mono);color:var(--dim)}
+.meta b{display:block;color:var(--ink);font-weight:600;font-size:14px}
+
+/* ------------------------------------------------------- tira da cadeia */
+.chainbar{margin:34px 0 0;padding:14px;border-radius:11px;background:var(--d-bg);
+  border:1px solid var(--d-line);overflow-x:auto}
+.chainbar .row{display:flex;align-items:center;gap:5px;min-width:max-content}
+.st{font:600 10px/1 var(--mono);letter-spacing:.07em;padding:6px 9px;border-radius:5px;
+  border:1px solid var(--d-line);background:var(--d-panel2);color:#61789033;
+  color:#617890;text-decoration:none;white-space:nowrap}
+a.st:hover{color:var(--d-txt);border-color:#3a4c62}
+a.st:focus-visible{outline:2px solid var(--d-raw);outline-offset:2px}
+.st.dc{color:var(--d-resp);border-color:rgba(244,114,182,.35);background:rgba(244,114,182,.12)}
+.st.on{color:var(--d-filt);border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.12)}
+.ar{color:#34455c;font:400 11px/1 var(--mono)}
+.chaincap{font:500 11.5px/1.5 var(--mono);color:var(--dim);margin:9px 2px 0}
+
+/* -------------------------------------------------------------- estagios */
+section.stage{margin-top:60px;padding-top:30px;border-top:1px solid var(--line)}
+.sthead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.tag{font:600 10px/1 var(--mono);letter-spacing:.1em;padding:5px 8px;border-radius:5px;
+  background:var(--surf2);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.tag.pink{color:#a3407a;border-color:#e0b6cf;background:#fbeff6}
+:root:not([data-theme="light"]) .tag.pink{color:var(--d-resp);border-color:rgba(244,114,182,.35);background:rgba(244,114,182,.12)}
+:root[data-theme="dark"] .tag.pink{color:var(--d-resp);border-color:rgba(244,114,182,.35);background:rgba(244,114,182,.12)}
+.sthead .cli{font:500 11.5px/1 var(--mono);color:var(--dim)}
+.stgrid{display:grid;gap:24px;grid-template-columns:1fr;margin-top:20px}
+@media(min-width:900px){.stgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:start}}
+
+/* painel de controles, reproduzindo o do app */
+.dev{background:var(--d-panel);border:1px solid var(--d-line);border-radius:10px;
+  overflow:hidden;color:var(--d-txt)}
+.dev-h{padding:9px 12px;border-bottom:1px solid var(--d-line);background:#141b24;
+  font:600 10px/1 var(--mono);letter-spacing:.1em;color:#9fb2c7}
+.dev-b{padding:10px 12px}
+.ctl{display:flex;align-items:center;gap:9px;margin-top:9px;font:400 11px/1 var(--body);
+  color:var(--d-dim)}
+.ctl:first-child{margin-top:0}
+.ctl>span{width:58px;flex:none}
+.trk{flex:1;height:4px;border-radius:3px;background:var(--d-line);position:relative;min-width:48px}
+.trk::after{content:"";position:absolute;top:-4px;left:var(--p,50%);width:12px;height:12px;
+  border-radius:50%;background:#8ea3ba;transform:translateX(-50%)}
+.val{font:500 11.5px/1 var(--mono);color:var(--d-txt);width:62px;text-align:right;flex:none;
+  font-variant-numeric:tabular-nums}
+.sel{font:500 11px/1 var(--mono);color:var(--d-txt);background:var(--d-panel2);
+  border:1px solid var(--d-line);border-radius:5px;padding:4px 7px}
+.rng{font:400 10px/1 var(--mono);color:#5b6c81;padding:8px 12px 0}
+
+/* grafico */
+figure{margin:0}
+figure svg{display:block;width:100%;height:auto;background:var(--d-bg);
+  border:1px solid var(--d-line);border-radius:10px}
+figcaption{font:500 11.5px/1.5 var(--mono);color:var(--dim);margin-top:9px}
+
+/* quando mexer / quanto custa */
+.pair{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  border-radius:10px;overflow:hidden;margin-top:22px}
+@media(min-width:700px){.pair{grid-template-columns:1fr 1fr}}
+.pair>div{background:var(--surf);padding:15px 17px}
+.pair h3{margin:0 0 6px}
+.pair p{margin:0;font-size:14.5px;color:var(--dim)}
+.pair .k{font:600 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+  color:var(--dim);display:block;margin-bottom:7px}
+.custo h3{color:var(--acc2)}
+
+ul{margin:13px 0;padding-left:21px}
+li{margin:6px 0}
+.dl{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  border-radius:9px;overflow:hidden;margin:20px 0;font-size:14.5px}
+.dl>div{background:var(--surf);padding:11px 15px;display:grid;gap:3px 16px}
+@media(min-width:640px){.dl>div{grid-template-columns:140px 1fr;align-items:baseline}}
+.dl dt{font:500 12px/1.5 var(--mono);color:var(--acc)}
+.dl dd{margin:0;color:var(--dim)}
+
+.callout{border-left:3px solid var(--acc2);background:var(--surf);padding:14px 18px;
+  border-radius:0 9px 9px 0;margin:22px 0}
+.callout p{margin:0;font-size:14.5px}
+.callout p+p{margin-top:9px}
+
+/* ------------------------------------------------------------ laboratorio */
+.lab{background:var(--d-panel);border:1px solid var(--d-line);border-radius:11px;
+  overflow:hidden;margin-top:22px;color:var(--d-txt)}
+.lab-b{display:grid;gap:0;grid-template-columns:1fr}
+@media(min-width:820px){.lab-b{grid-template-columns:260px minmax(0,1fr)}}
+.lab-c{padding:13px;border-bottom:1px solid var(--d-line)}
+@media(min-width:820px){.lab-c{border-bottom:0;border-right:1px solid var(--d-line)}}
+.lab input[type=range]{flex:1;accent-color:#fbbf24;min-width:40px}
+.lab select{font:500 11px/1 var(--mono);color:var(--d-txt);background:var(--d-panel2);
+  border:1px solid var(--d-line);border-radius:5px;padding:5px 7px;width:100%}
+.lab label{display:block;font:600 9.5px/1 var(--mono);letter-spacing:.11em;
+  text-transform:uppercase;color:var(--d-dim);margin:0 0 7px}
+.lab .fld{margin-top:13px}
+.lab .fld:first-child{margin-top:0}
+.readout{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--d-line);
+  border-top:1px solid var(--d-line)}
+.readout div{background:var(--d-panel);padding:9px 12px}
+.readout .k{font:600 9px/1 var(--mono);letter-spacing:.11em;text-transform:uppercase;color:var(--d-dim)}
+.readout .v{font:600 15px/1.2 var(--mono);margin-top:5px;font-variant-numeric:tabular-nums}
+.lab figure svg{border:0;border-radius:0}
+
+footer{margin-top:70px;padding-top:22px;border-top:1px solid var(--line);
+  font-size:13.5px;color:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="col">
+  <p class="eyebrow">Analisador de vibração BMI323 · ESP32-S3</p>
+  <h1>Ajuste dos filtros</h1>
+  <p class="lede">A cadeia é a do Betaflight, portada estágio por estágio. Este guia diz,
+  para cada um: o que ele faz no sinal, quando vale mexer, o que digitar, e quanto de
+  atraso você paga. Os gráficos são calculados com as mesmas fórmulas que rodam no
+  ESP32 — não são desenhos.</p>
+  <div class="meta">
+    <div>amostragem<b>1600 Hz</b></div>
+    <div>Nyquist<b>800 Hz</b></div>
+    <div>FFT<b>1024 · 1,56 Hz/bin</b></div>
+    <div>fonte<b>lib/Filtros</b></div>
+  </div>
+</header>
+
+<div class="chainbar" aria-label="ordem dos estágios na cadeia">
+  <div class="row">
+    <a class="st dc" href="#dc">DC</a><span class="ar">›</span>
+    <a class="st on" href="#lpf2">LPF2</a><span class="ar">›</span>
+    <a class="st" href="#rpm">RPM</a><span class="ar">›</span>
+    <a class="st" href="#n1">N1</a><span class="ar">›</span>
+    <a class="st" href="#n1">N2</a><span class="ar">›</span>
+    <a class="st on" href="#lpf1">LPF1</a><span class="ar">›</span>
+    <a class="st on" href="#dyn">DYN</a>
+  </div>
+</div>
+<p class="chaincap">A ordem é a de <code>gyro_filter_impl.c</code> e não é negociável: o sinal
+passa por todos, sempre nessa sequência. Âmbar = ligado por padrão. Clique para ir ao estágio.</p>
+
+<section class="col" style="margin-top:52px">
+  <p class="eyebrow">Antes de mexer em nada</p>
+  <h2>O caminho curto resolve a maioria dos casos</h2>
+  <p>O painel tem duas entradas no topo, fora das abas, e elas cobrem o uso normal:</p>
+  <div class="dl">
+    <div><dt>OSCILAÇÕES</dt><dd>Digite a frequência que incomoda — <code>118,4</code>, ou várias
+      de uma vez (<code>118 236 354</code>), ou clique em <b>+ filtrar</b> na tabela de picos.
+      O painel decide sozinho o destino: família harmônica vira filtro RPM, alvo fixo isolado
+      vira notch, alvo marcado com <code>~</code> vira notch dinâmico.</dd></div>
+    <div><dt>INTENSIDADE</dt><dd>25 % a 200 % sobre <em>todos</em> os cortes de passa-baixa de
+      uma vez. É o <code>simplified_gyro_filter_multiplier</code> do Betaflight. Esquerda filtra
+      menos e atrasa menos; direita filtra mais.</dd></div>
+  </div>
+  <p>As abas por estágio existem para quando isso não basta — e para auditar o que o
+  alocador escreveu. A linha <b>corte · atraso · cortes</b> logo abaixo da tira mostra
+  o efeito de qualquer mudança, nas duas vias.</p>
+</section>
+
+<!-- ============================================================== DC ==== -->
+<section class="stage" id="dc">
+  <div class="sthead">
+    <span class="tag pink">DC-BLOCK</span>
+    <h2>Tira a gravidade do caminho</h2>
+    <span class="cli">não existe no Betaflight</span>
+  </div>
+  <div class="col"><p>O Betaflight filtra giroscópio, que não tem componente contínua. Aqui o
+  sinal é aceleração: parado na mesa, um eixo marca 1 g. Sem esse passa-alta, esse 1 g
+  vira uma raia gigante no bin zero e domina toda a escala do espectro — a vibração de
+  5 mg que você quer ver fica invisível.</p></div>
+
+  <div class="stgrid">
+    <div class="dev">
+      <div class="dev-h">DC-BLOCK</div>
+      <div class="dev-b">
+        <div class="ctl"><span>corte</span><span class="trk" style="--p:8%"></span><span class="val">2,0 Hz</span></div>
+      </div>
+      <div class="rng">faixa 0,5 – 20 Hz · padrão 2,0 Hz · PT1 usado como passa-alta</div>
+    </div>
+    <figure>
+      <svg id="g-dc" viewBox="0 0 520 200" role="img"
+           aria-label="resposta do DC-block: passa-alta de primeira ordem em 2 Hz"></svg>
+      <figcaption>Passa-alta de 1ª ordem. Em 2 Hz o corte é −3 dB; acima de 20 Hz
+      já não mexe em nada.</figcaption>
+    </figure>
+  </div>
+
+  <div class="pair">
+    <div><span class="k">quando mexer</span><h3>Quase nunca</h3>
+      <p>Suba para 5–10 Hz se a peça balança devagar e esse balanço atrapalha a leitura.
+      Desça para 0,5 Hz se você precisa medir vibração abaixo de 5 Hz.</p></div>
+    <div class="custo"><span class="k">quanto custa</span><h3>Nada, na faixa útil</h3>
+      <p>O atraso de um passa-alta explode perto de DC — 80 ms em 2 Hz — mas cai com o
+      quadrado da frequência. Em 100 Hz é 0,03 ms. Por isso a leitura de atraso do painel
+      o exclui, e diz isso no <i>title</i>.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================ LPF2 ==== -->
+<section class="stage" id="lpf2">
+  <div class="sthead">
+    <span class="tag">LPF 2</span>
+    <h2>A primeira suavização</h2>
+    <span class="cli">gyro_lpf2_type · gyro_lpf2_static_hz</span>
+  </div>
+  <div class="col"><p>No Betaflight este é o filtro de decimação: roda na taxa bruta do
+  giroscópio e entrega ao loop do PID. Aqui a cadeia toda roda na mesma taxa, então ele é
+  simplesmente o primeiro passa-baixa — o que corta o ruído de banda alta antes que os
+  notches tenham que lidar com ele.</p></div>
+
+  <div class="stgrid">
+    <div class="dev">
+      <div class="dev-h">LPF 2</div>
+      <div class="dev-b">
+        <div class="ctl"><span>tipo</span><span class="sel">PT1</span>
+          <span class="val" style="width:auto">1 polo</span></div>
+        <div class="ctl"><span>corte</span><span class="trk" style="--p:62%"></span><span class="val">500 Hz</span></div>
+      </div>
+      <div class="rng">tipo PT1 · BIQUAD · PT2 · PT3 &nbsp;·&nbsp; corte 0 = desligado · padrão 500 Hz</div>
+    </div>
+    <figure>
+      <svg id="g-tipos" viewBox="0 0 520 220" role="img"
+           aria-label="comparação das quatro famílias de passa-baixa em 250 Hz"></svg>
+      <figcaption>Os quatro tipos, todos em 250 Hz. Quanto mais íngreme a queda,
+      maior o atraso — os números estão na tabela abaixo.</figcaption>
+    </figure>
+  </div>
+
+  <p class="col">A escolha do tipo é uma troca direta entre inclinação e atraso. Os valores
+  são do filtro digital com <code>fs = 1600 Hz</code>, não da aproximação analógica:</p>
+
+  <div class="dl">
+    <div><dt>PT1</dt><dd>Um polo. Queda de 20 dB por década, atraso de <b>0,64 ms</b> em
+      250 Hz. É o padrão do Betaflight nos dois passa-baixas, e resolve a maioria dos casos.</dd></div>
+    <div><dt>BIQUAD</dt><dd>Butterworth de 2ª ordem, Q = 0,707. Mais íngreme perto do corte,
+      <b>0,83 ms</b>. Único que tolera troca de coeficiente em regime — é o que o LPF1
+      dinâmico usa.</dd></div>
+    <div><dt>PT2</dt><dd>Dois PT1 em série com o corte corrigido por 1,5538. <b>0,80 ms</b>.</dd></div>
+    <div><dt>PT3</dt><dd>Três em série, correção 1,9615. <b>0,97 ms</b>, e a queda mais
+      limpa das quatro. É para quando o ruído está logo acima da banda de interesse.</dd></div>
+  </div>
+
+  <div class="pair">
+    <div><span class="k">quando mexer</span><h3>Se sobra ruído acima de 400 Hz</h3>
+      <p>Desça o corte até o ruído sair sem comer o sinal. Com ODR de 1600 Hz e Nyquist em
+      800, deixar em 500 Hz já derruba a metade de cima do espectro.</p></div>
+    <div class="custo"><span class="k">quanto custa</span><h3>Some com o LPF1</h3>
+      <p>Os dois passa-baixas atrasam em série. PT1 500 Hz mais PT1 250 Hz dão
+      0,32 + 0,64 = <b>0,95 ms</b> — é o número que aparece no painel.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================= RPM ==== -->
+<section class="stage" id="rpm">
+  <div class="sthead">
+    <span class="tag">RPM</span>
+    <h2>Corta a fundamental e as harmônicas juntas</h2>
+    <span class="cli">rpm_filter_*</span>
+  </div>
+  <div class="col"><p>Máquina rotativa não vibra numa frequência só: vibra na rotação e nos
+  seus múltiplos. Este estágio põe um notch estreito na fundamental e um em cada harmônica,
+  todos de uma vez. No drone a frequência chega pronta pela telemetria dos ESCs; aqui a
+  fonte é você ou o pico do espectro.</p></div>
+
+  <div class="stgrid">
+    <div class="dev">
+      <div class="dev-h">RPM</div>
+      <div class="dev-b">
+        <div class="ctl"><span>fonte</span><span class="sel">manual</span>
+          <span class="val" style="width:auto">ou auto (pico)</span></div>
+        <div class="ctl"><span>base</span><span class="trk" style="--p:15%"></span><span class="val">118,4 Hz</span></div>
+        <div class="ctl"><span>harmônicas</span><span class="sel">3</span>
+          <span class="val" style="width:auto">Q 5,00</span></div>
+        <div class="ctl"><span>mín</span><span class="trk" style="--p:50%"></span><span class="val">100 Hz</span></div>
+        <div class="ctl"><span>fade</span><span class="trk" style="--p:17%"></span><span class="val">50 Hz</span></div>
+        <div class="ctl"><span>suav.</span><span class="trk" style="--p:30%"></span><span class="val">150 Hz</span></div>
+        <div class="ctl"><span>peso</span><span class="trk" style="--p:100%"></span><span class="val">100/100/100</span></div>
+      </div>
+      <div class="rng">Q 250 – 3000 (÷100) · harmônicas 0 – 3 · padrões idênticos aos do Betaflight</div>
+    </div>
+    <figure>
+      <svg id="g-rpm" viewBox="0 0 520 220" role="img"
+           aria-label="pente de notches do filtro RPM em 118, 237 e 355 Hz"></svg>
+      <figcaption>Fundamental em 118,4 Hz e duas harmônicas, Q = 5. Entre os dentes
+      o sinal passa intocado — é isso que diferencia um pente de um passa-baixa.</figcaption>
+    </figure>
+  </div>
+
+  <div class="dl">
+    <div><dt>base</dt><dd>A fundamental. Em <code>manual</code> você digita; em
+      <code>auto (pico)</code> ela vem do maior pico da FFT, atualizada a cada quadro.</dd></div>
+    <div><dt>harmônicas</dt><dd>Quantos múltiplos cortar. Três é o padrão. Cada harmônica
+      é um notch a mais, com seu próprio custo.</dd></div>
+    <div><dt>Q</dt><dd>Largura de cada dente. 5,00 é estreito e cirúrgico; 2,50 é o mínimo
+      que o firmware aceita, e já pega bem mais banda em volta.</dd></div>
+    <div><dt>mín · fade</dt><dd>Abaixo de <code>mín</code> o notch desliga; nos
+      <code>fade</code> hertz acima dele o peso sobe de 0 a 1 progressivamente, em vez de
+      ligar de golpe. Vem da lógica de motor parando.</dd></div>
+    <div><dt>suav.</dt><dd><code>rpm_filter_lpf_hz</code>: um PT1 sobre a própria frequência,
+      antes de ela virar coeficiente. Sem ele, um salto na frequência detectada reescreve os
+      coeficientes de uma vez e o notch pula.</dd></div>
+    <div><dt>peso</dt><dd>Atenuação por harmônica, 0 a 100 %. Peso 0 é passa-tudo: a
+      harmônica existe mas não faz nada.</dd></div>
+  </div>
+
+  <div class="pair">
+    <div><span class="k">quando mexer</span><h3>Rotação conhecida e estável</h3>
+      <p>Motor, bomba, ventilador, eixo. Se você sabe o RPM, divida por 60 e digite. Se as
+      harmônicas aparecem no espectro em 2× e 3× do pico, a lista de oscilações reconhece a
+      família sozinha e monta isto para você.</p></div>
+    <div class="custo"><span class="k">quanto custa</span><h3>Pouco, e cai com o Q</h3>
+      <p>Um notch atrasa <code>1/(2π·f₀·Q)</code> em DC. Em 118 Hz com Q = 5 são 0,27 ms;
+      as três harmônicas somam cerca de <b>0,5 ms</b>. Notch mais estreito atrasa
+      <em>menos</em>, não mais.</p></div>
+  </div>
+</section>
+
+<!-- =========================================================== NOTCH ==== -->
+<section class="stage" id="n1">
+  <div class="sthead">
+    <span class="tag">NOTCH 1 · 2</span>
+    <h2>Duas frequências fixas, à mão</h2>
+    <span class="cli">gyro_notch1/2_hz · gyro_notch1/2_cutoff</span>
+  </div>
+  <div class="col"><p>Para raias isoladas que não são harmônicas de nada: uma ressonância de
+  estrutura, a rede de 60 Hz entrando por acoplamento, o modo de um suporte. São só dois —
+  o terceiro alvo fixo não cabe, e o painel avisa em vez de descartar em silêncio.</p></div>
+
+  <div class="stgrid">
+    <div class="dev">
+      <div class="dev-h">NOTCH 1</div>
+      <div class="dev-b">
+        <div class="ctl"><span>centro</span><span class="trk" style="--p:15%"></span><span class="val">118,4 Hz</span></div>
+        <div class="ctl"><span>corte</span><span class="trk" style="--p:13%"></span><span class="val">100,3 Hz</span></div>
+      </div>
+      <div class="rng">o Q não é digitado: sai de centro e corte, por <code>filterGetNotchQ()</code></div>
+    </div>
+    <figure>
+      <svg id="g-notch" viewBox="0 0 520 220" role="img"
+           aria-label="notch em 118 Hz com três valores de Q"></svg>
+      <figcaption>O mesmo centro com os três Q que a lista de oscilações oferece.
+      Estreito tira quase só a raia; largo leva a vizinhança junto.</figcaption>
+    </figure>
+  </div>
+
+  <div class="callout">
+    <p><strong>Por que existe um campo "corte" e não um campo "Q".</strong> O Betaflight
+    parametriza o notch por centro mais corte inferior e deriva o Q:
+    <code>Q = f₀·f_c/(f₀² − f_c²)</code>. O porte mantém isso para o código continuar
+    comparável linha a linha com o original.</p>
+    <p>A lista de oscilações resolve pelo outro lado — você escolhe <b>estreita</b>,
+    <b>média</b> ou <b>larga</b> e ela inverte a fórmula:
+    <code>f_c = f₀·(√(1+4Q²) − 1)/(2Q)</code>. Dá 0,905·f₀ para Q 5, 0,847·f₀ para Q 3
+    e 0,721·f₀ para Q 1,5.</p>
+  </div>
+
+  <div class="pair">
+    <div><span class="k">quando mexer</span><h3>Raia fixa que você já identificou</h3>
+      <p>Meça primeiro, filtre depois. Clique no pico na tabela e deixe o painel preencher
+      centro e corte — acertar 118,4 Hz arrastando um slider é impossível, e é por isso que
+      todo valor aceita clique para digitar.</p></div>
+    <div class="custo"><span class="k">quanto custa</span><h3>0,2 a 0,9 ms cada</h3>
+      <p>Depende do Q e da frequência. Notch largo em frequência baixa é o caso caro:
+      Q 1,5 em 60 Hz custa 1,8 ms. Q 5 em 300 Hz custa 0,11 ms.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================ LPF1 ==== -->
+<section class="stage" id="lpf1">
+  <div class="sthead">
+    <span class="tag">LPF 1</span>
+    <h2>A suavização de saída</h2>
+    <span class="cli">gyro_lpf1_* · dyn_lpf</span>
+  </div>
+  <div class="col"><p>Último passa-baixa antes do notch dinâmico, e o que define o corte que
+  aparece na leitura do painel. Pode ser estático ou seguir uma carga: no drone o corte sobe
+  com o acelerador, aqui ele segue um nível 0–100 % que a aplicação informa — o controle
+  <b>CARGA</b>, que fica no painel do simulador porque é estímulo, não ajuste.</p></div>
+
+  <div class="stgrid">
+    <div class="dev">
+      <div class="dev-h">LPF 1 · dinâmico</div>
+      <div class="dev-b">
+        <div class="ctl"><span>tipo</span><span class="sel">PT1</span>
+          <span class="val" style="width:auto">☑ dinâmico</span></div>
+        <div class="ctl"><span>mín</span><span class="trk" style="--p:31%"></span><span class="val">250 Hz</span></div>
+        <div class="ctl"><span>máx</span><span class="trk" style="--p:62%"></span><span class="val">500 Hz</span></div>
+        <div class="ctl"><span>expo</span><span class="trk" style="--p:50%"></span><span class="val">5</span></div>
+      </div>
+      <div class="rng">estático: um corte só · dinâmico: mín, máx e a curvatura do expo (0–10)</div>
+    </div>
+    <figure>
+      <svg id="g-dyn1" viewBox="0 0 520 220" role="img"
+           aria-label="curva do corte dinâmico entre 250 e 500 Hz para vários expo"></svg>
+      <figcaption>Como o corte caminha de 250 a 500 Hz conforme a carga.
+      Expo 0 é reta; 10 empurra o ganho para o começo do curso.</figcaption>
+    </figure>
+  </div>
+
+  <div class="callout">
+    <p><strong>Uma armadilha que já custou um bug aqui.</strong> Com corte variável, os
+    coeficientes são reescritos com o filtro em regime — e só a forma direta 1 (DF1) aguenta
+    isso. A DF2 transposta é mais precisa, mas produz transiente a cada atualização. O código
+    troca para DF1 quando <code>dinâmico</code> está marcado, exatamente como o Betaflight
+    faz em <code>gyro_init.c</code>.</p>
+  </div>
+
+  <div class="pair">
+    <div><span class="k">quando mexer</span><h3>Estático quase sempre</h3>
+      <p>O dinâmico existe para regime variável — máquina que muda de rotação, ensaio com
+      rampa. Em bancada com rotação fixa, um corte só é mais simples de justificar depois.</p></div>
+    <div class="custo"><span class="k">quanto custa</span><h3>É o maior contribuinte</h3>
+      <p>Sendo o corte mais baixo da cadeia, é ele que domina o atraso. Puxar de 250 para
+      125 Hz dobra: de 0,64 para <b>1,27 ms</b>. Use a INTENSIDADE para mexer nos dois
+      passa-baixas juntos e ver o custo mudar.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================= DYN ==== -->
+<section class="stage" id="dyn">
+  <div class="sthead">
+    <span class="tag">NOTCH DINÂMICO</span>
+    <h2>Persegue o pico sozinho</h2>
+    <span class="cli">dyn_notch_* · SDFT</span>
+  </div>
+  <div class="col"><p>Para quando a frequência não fica quieta. Uma SDFT de 72 amostras
+  mantém o espectro sempre atualizado a custo O(N) por amostra, uma máquina de quatro passos
+  encontra os maiores picos, refina a posição por parábola e move os notches até eles. São
+  quatro passos por eixo, doze para os três — a 1600 Hz, cada eixo se atualiza 133 vezes
+  por segundo.</p></div>
+
+  <div class="stgrid">
+    <div class="dev">
+      <div class="dev-h">NOTCH DINÂMICO</div>
+      <div class="dev-b">
+        <div class="ctl"><span>qtd</span><span class="sel">3</span>
+          <span class="val" style="width:auto">Q 3,00</span></div>
+        <div class="ctl"><span>mín</span><span class="trk" style="--p:35%"></span><span class="val">100 Hz</span></div>
+        <div class="ctl"><span>máx</span><span class="trk" style="--p:55%"></span><span class="val">600 Hz</span></div>
+      </div>
+      <div class="rng">qtd 0 – 3 · Q 1 – 1000 (÷100) · mín 20 – 250 Hz · máx 100 – nyquist</div>
+    </div>
+    <figure>
+      <svg id="g-track" viewBox="0 0 520 220" role="img"
+           aria-label="espectro com ruído e três notches dinâmicos sobre os picos"></svg>
+      <figcaption>Espectro medido em cinza, os três notches onde a SDFT encontrou pico.
+      Eles se movem com as raias; o que está entre elas passa.</figcaption>
+    </figure>
+  </div>
+
+  <div class="dl">
+    <div><dt>qtd</dt><dd>Quantos picos perseguir, até 3. Zero desliga o estágio.</dd></div>
+    <div><dt>Q</dt><dd>3,00 é o padrão do Betaflight. Mais estreito rastreia melhor picos
+      finos; mais largo tolera raia que oscila de posição.</dd></div>
+    <div><dt>mín · máx</dt><dd>A faixa onde procurar. Ela também define a resolução: o
+      firmware acumula amostras para a SDFT rodar a cerca de 2× o máximo, então
+      <code>máx</code> menor dá bin mais fino. Com máx em 600 Hz e fs 1600, o bin é 22 Hz.</dd></div>
+  </div>
+
+  <div class="callout">
+    <p><strong>Este estágio roda fora da especificação do Betaflight, de propósito.</strong>
+    Lá o notch dinâmico é desligado abaixo de 2 kHz de loop, porque a máquina de estados
+    precisa de 12 iterações e a atualização fica lenta demais para um drone. Aqui o piso é
+    500 Hz: a dinâmica de uma máquina em bancada é ordens de grandeza mais lenta que a de
+    uma aeronave, então 133 atualizações por segundo por eixo sobram.</p>
+  </div>
+
+  <div class="pair">
+    <div><span class="k">quando mexer</span><h3>Frequência que varia</h3>
+      <p>Rotação que sobe e desce, ressonância que passeia com a temperatura, ensaio em
+      rampa. Marque o chip com <code>~</code> na lista de oscilações e ele cai aqui, com a
+      faixa já ajustada em volta do alvo.</p></div>
+    <div class="custo"><span class="k">quanto custa</span><h3>0,18 ms por notch, e CPU</h3>
+      <p>Em 300 Hz com Q 3, cada notch atrasa 0,18 ms. O custo real é de processamento:
+      três SDFTs e a máquina de estados rodando a cada amostra.</p></div>
+  </div>
+</section>
+
+<!-- ==================================================== laboratorio ===== -->
+<section class="stage" id="lab">
+  <div class="sthead">
+    <span class="tag">EXPERIMENTE</span>
+    <h2>A troca, em números</h2>
+  </div>
+  <div class="col"><p>Mesmas fórmulas do firmware, a 1600 Hz. Mexa e veja a curva e o atraso
+  andarem juntos — é essa relação que decide até onde vale apertar.</p></div>
+
+  <div class="lab">
+    <div class="lab-b">
+      <div class="lab-c">
+        <div class="fld"><label for="l-tipo">tipo</label>
+          <select id="l-tipo">
+            <option value="0">PT1 — 1 polo</option>
+            <option value="1">BIQUAD — Butterworth</option>
+            <option value="2">PT2 — 2 polos</option>
+            <option value="3">PT3 — 3 polos</option>
+          </select></div>
+        <div class="fld"><label for="l-corte">corte do passa-baixa</label>
+          <div style="display:flex;align-items:center;gap:9px">
+            <input type="range" id="l-corte" min="20" max="700" step="5" value="250">
+            <span class="val" id="l-cortev">250 Hz</span>
+          </div></div>
+        <div class="fld"><label for="l-nf">notch — centro</label>
+          <div style="display:flex;align-items:center;gap:9px">
+            <input type="range" id="l-nf" min="0" max="600" step="1" value="118">
+            <span class="val" id="l-nfv">118 Hz</span>
+          </div></div>
+        <div class="fld"><label for="l-nq">notch — largura</label>
+          <select id="l-nq">
+            <option value="5">estreita — Q 5,0</option>
+            <option value="3" selected>média — Q 3,0</option>
+            <option value="1.5">larga — Q 1,5</option>
+          </select></div>
+      </div>
+      <figure><svg id="g-lab" viewBox="0 0 620 260" role="img"
+        aria-label="resposta da cadeia montada no laboratório"></svg></figure>
+    </div>
+    <div class="readout">
+      <div><div class="k">atraso em DC</div><div class="v" id="l-atraso" style="color:var(--d-raw)">—</div></div>
+      <div><div class="k">corte do notch</div><div class="v" id="l-nc" style="color:var(--d-resp)">—</div></div>
+    </div>
+  </div>
+</section>
+
+<footer class="col">
+  <p>As fórmulas são as de <code>lib/Filtros/src/bf_filter.cpp</code>, porte de
+  <code>src/main/common/filter.c</code> do Betaflight (GPL-3.0). Os atrasos são atraso de
+  grupo em DC, calculados sobre os coeficientes digitais em 1600 Hz — não sobre a
+  aproximação em <i>s</i>, que a essa razão de frequência já erra 8 % no biquad.</p>
+  <p><a href="https://github.com/engenharia10/bmi323-vibration-analyzer">Código</a> ·
+  <a href="https://engenharia10.github.io/bmi323-vibration-analyzer/">Interface de demonstração</a></p>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var FS = 1600, TAU = Math.PI * 2;
+  var C2 = 1.553773974, C3 = 1.961459177;
+
+  /* ---- as mesmas contas do firmware ------------------------------------ */
+  function pt1k(fc){ var w = TAU * fc / FS; return w / (w + 1); }
+  function pt1H(k, w){
+    var a = 1 - k, dr = 1 - a * Math.cos(w), di = a * Math.sin(w), d2 = dr * dr + di * di;
+    return { re: k * dr / d2, im: -k * di / d2 };
+  }
+  function cmul(a, b){ return { re: a.re * b.re - a.im * b.im, im: a.re * b.im + a.im * b.re }; }
+  function cpow(a, n){ var r = { re: 1, im: 0 }; for (var i = 0; i < n; i++) r = cmul(r, a); return r; }
+  function biq(type, f, q){
+    var nyq = FS / 2;
+    f = Math.min(Math.max(f, 0.1), nyq * 0.98);
+    var w = TAU * f / FS, sn = Math.sin(w), cs = Math.cos(w), al = sn / (2 * q), b0, b1, b2, a1, a2;
+    if (type === "lpf"){ b1 = 1 - cs; b0 = b1 * 0.5; b2 = b0; a1 = -2 * cs; a2 = 1 - al; }
+    else { b0 = 1; b1 = -2 * cs; b2 = 1; a1 = b1; a2 = 1 - al; }
+    var a0 = 1 + al;
+    return { b0: b0/a0, b1: b1/a0, b2: b2/a0, a1: a1/a0, a2: a2/a0 };
+  }
+  function biqH(c, w){
+    var cw = Math.cos(w), sw = Math.sin(w), c2 = Math.cos(2*w), s2 = Math.sin(2*w);
+    var nr = c.b0 + c.b1*cw + c.b2*c2, ni = -(c.b1*sw + c.b2*s2);
+    var dr = 1 + c.a1*cw + c.a2*c2,    di = -(c.a1*sw + c.a2*s2);
+    var d2 = Math.max(dr*dr + di*di, 1e-20);
+    return { re: (nr*dr + ni*di)/d2, im: (ni*dr - nr*di)/d2 };
+  }
+  var mag = function(h){ return Math.hypot(h.re, h.im); };
+
+  function lpfH(tipo, fc, w){
+    if (tipo === 1) return biqH(biq("lpf", fc, Math.SQRT1_2), w);
+    var n = tipo === 0 ? 1 : tipo === 2 ? 2 : 3;
+    var corr = n === 1 ? 1 : n === 2 ? C2 : C3;
+    return cpow(pt1H(pt1k(fc * corr), w), n);
+  }
+  // atraso de grupo em DC por diferenca finita sobre H(w+d)*conj(H(w))
+  function atrasoMs(fns){
+    var d = 1e-4;
+    function tot(w){ var r = { re: 1, im: 0 }; for (var i = 0; i < fns.length; i++) r = cmul(r, fns[i](w)); return r; }
+    var a = tot(0), b = tot(d), p = cmul(b, { re: a.re, im: -a.im });
+    return -Math.atan2(p.im, p.re) / d / FS * 1000;
+  }
+  var qParaCorte = function(f0, q){ return f0 * (Math.sqrt(1 + 4*q*q) - 1) / (2*q); };
+
+  /* ---- desenho ---------------------------------------------------------- */
+  var GRID = "#1b2534", TXT = "#5b7täo";
+  GRID = "#1b2534"; TXT = "#5b6c81"; var TXT2 = "#3f5266";
+
+  function svgEl(n, at){
+    var e = document.createElementNS("http://www.w3.org/2000/svg", n);
+    for (var k in at) e.setAttribute(k, at[k]);
+    return e;
+  }
+  // eixo: dB no vertical, Hz no horizontal, com rotulos dentro do viewBox
+  function eixos(svg, W, H, fmax, dbTop, dbBot, marcasDb, marcasHz){
+    var L = 42, R = W - 10, T = 12, B = H - 22;
+    var x = function(f){ return L + f / fmax * (R - L); };
+    var y = function(db){ return T + (dbTop - db) / (dbTop - dbBot) * (B - T); };
+    marcasDb.forEach(function(db){
+      svg.appendChild(svgEl("line", { x1: L, y1: y(db), x2: R, y2: y(db),
+        stroke: GRID, "stroke-width": 1 }));
+      var t = svgEl("text", { x: L - 6, y: y(db) + 3.5, fill: TXT2,
+        "font-size": 9, "font-family": "IBM Plex Mono, monospace", "text-anchor": "end" });
+      t.textContent = db;
+      svg.appendChild(t);
+    });
+    marcasHz.forEach(function(f){
+      svg.appendChild(svgEl("line", { x1: x(f), y1: T, x2: x(f), y2: B,
+        stroke: GRID, "stroke-width": 1 }));
+      var t = svgEl("text", { x: x(f), y: B + 13, fill: TXT2,
+        "font-size": 9, "font-family": "IBM Plex Mono, monospace", "text-anchor": "middle" });
+      t.textContent = f;
+      svg.appendChild(t);
+    });
+    var u = svgEl("text", { x: L - 6, y: T - 2, fill: TXT2, "font-size": 8.5,
+      "font-family": "IBM Plex Mono, monospace", "text-anchor": "end" });
+    u.textContent = "dB";
+    svg.appendChild(u);
+    var hz = svgEl("text", { x: R, y: B + 13, fill: TXT2, "font-size": 8.5,
+      "font-family": "IBM Plex Mono, monospace", "text-anchor": "end" });
+    hz.textContent = "Hz";
+    svg.appendChild(hz);
+    return { x: x, y: y, L: L, R: R, T: T, B: B };
+  }
+  function curva(svg, g, fmax, dbTop, dbBot, fn, cor, larg, tracejado){
+    var d = "", passo = (g.R - g.L) / 260;
+    for (var px = 0; px <= g.R - g.L; px += passo){
+      var f = px / (g.R - g.L) * fmax;
+      var m = fn(TAU * Math.max(f, 0.05) / FS);
+      var db = Math.max(dbBot, Math.min(dbTop, 20 * Math.log10(Math.max(m, 1e-6))));
+      d += (d ? "L" : "M") + (g.L + px).toFixed(1) + " " + g.y(db).toFixed(1);
+    }
+    var p = svgEl("path", { d: d, fill: "none", stroke: cor, "stroke-width": larg || 2,
+      "stroke-linejoin": "round" });
+    if (tracejado) p.setAttribute("stroke-dasharray", tracejado);
+    svg.appendChild(p);
+    return p;
+  }
+  function legenda(svg, itens, x0, y0){
+    itens.forEach(function(it, i){
+      var y = y0 + i * 14;
+      svg.appendChild(svgEl("line", { x1: x0, y1: y, x2: x0 + 16, y2: y,
+        stroke: it[1], "stroke-width": 2.2 }));
+      var t = svgEl("text", { x: x0 + 22, y: y + 3.5, fill: "#8ea3ba", "font-size": 9.5,
+        "font-family": "IBM Plex Mono, monospace" });
+      t.textContent = it[0];
+      svg.appendChild(t);
+    });
+  }
+
+  /* ---- DC-block --------------------------------------------------------- */
+  (function(){
+    var svg = document.getElementById("g-dc"), W = 520, H = 200;
+    var g = eixos(svg, W, H, 60, 3, -33, [0, -10, -20, -30], [0, 10, 20, 30, 40, 50, 60]);
+    var k = pt1k(2);
+    curva(svg, g, 60, 3, -33, function(w){
+      var h = pt1H(k, w); return mag({ re: 1 - h.re, im: -h.im });
+    }, "#f472b6", 2.2);
+    // marca o -3 dB em 2 Hz
+    svg.appendChild(svgEl("circle", { cx: g.x(2), cy: g.y(-3), r: 3.2, fill: "#f472b6" }));
+    var t = svgEl("text", { x: g.x(2) + 8, y: g.y(-3) - 4, fill: "#f472b6", "font-size": 9.5,
+      "font-family": "IBM Plex Mono, monospace" });
+    t.textContent = "2 Hz  −3 dB";
+    svg.appendChild(t);
+  })();
+
+  /* ---- os quatro tipos -------------------------------------------------- */
+  (function(){
+    var svg = document.getElementById("g-tipos"), W = 520, H = 220, FM = 800;
+    var g = eixos(svg, W, H, FM, 4, -44, [0, -10, -20, -30, -40], [0, 200, 400, 600, 800]);
+    var cores = ["#22d3ee", "#fbbf24", "#33ff77", "#f472b6"];
+    var nomes = ["PT1", "BIQUAD", "PT2", "PT3"];
+    [0, 1, 2, 3].forEach(function(tp, i){
+      curva(svg, g, FM, 4, -44, function(w){ return mag(lpfH(tp, 250, w)); }, cores[i], 2);
+    });
+    svg.appendChild(svgEl("line", { x1: g.x(250), y1: g.T, x2: g.x(250), y2: g.B,
+      stroke: "#33445a", "stroke-width": 1, "stroke-dasharray": "3 3" }));
+    var t = svgEl("text", { x: g.x(250) + 6, y: g.T + 11, fill: "#617890", "font-size": 9,
+      "font-family": "IBM Plex Mono, monospace" });
+    t.textContent = "corte 250 Hz";
+    svg.appendChild(t);
+    legenda(svg, nomes.map(function(n, i){ return [n, cores[i]]; }), W - 100, 30);
+  })();
+
+  /* ---- pente do RPM ----------------------------------------------------- */
+  (function(){
+    var svg = document.getElementById("g-rpm"), W = 520, H = 220, FM = 600;
+    var g = eixos(svg, W, H, FM, 4, -44, [0, -10, -20, -30, -40], [0, 150, 300, 450, 600]);
+    var base = 118.4, cs = [];
+    for (var h = 1; h <= 3; h++) cs.push(biq("notch", base * h, 5));
+    curva(svg, g, FM, 4, -44, function(w){
+      var m = 1;
+      for (var i = 0; i < cs.length; i++) m *= mag(biqH(cs[i], w));
+      return m;
+    }, "#818cf8", 2.2);
+    [1, 2, 3].forEach(function(h){
+      var f = base * h;
+      var t = svgEl("text", { x: g.x(f), y: g.B - 6, fill: "#818cf8", "font-size": 9,
+        "font-family": "IBM Plex Mono, monospace", "text-anchor": "middle" });
+      t.textContent = f.toFixed(0);
+      svg.appendChild(t);
+    });
+    legenda(svg, [["H1 · H2 · H3, Q 5", "#818cf8"]], W - 150, 30);
+  })();
+
+  /* ---- notch com tres Q ------------------------------------------------- */
+  (function(){
+    var svg = document.getElementById("g-notch"), W = 520, H = 220, FM = 300;
+    var g = eixos(svg, W, H, FM, 4, -44, [0, -10, -20, -30, -40], [0, 75, 150, 225, 300]);
+    var cores = ["#22d3ee", "#fbbf24", "#f472b6"], qs = [5, 3, 1.5];
+    qs.forEach(function(q, i){
+      var c = biq("notch", 118.4, q);
+      curva(svg, g, FM, 4, -44, function(w){ return mag(biqH(c, w)); }, cores[i], 2);
+    });
+    legenda(svg, [["estreita  Q 5,0", cores[0]], ["média     Q 3,0", cores[1]],
+                  ["larga     Q 1,5", cores[2]]], W - 165, 30);
+  })();
+
+  /* ---- curva do corte dinamico ------------------------------------------ */
+  (function(){
+    var svg = document.getElementById("g-dyn1"), W = 520, H = 220;
+    var L = 42, R = W - 10, T = 12, B = H - 22;
+    var x = function(c){ return L + c * (R - L); };
+    var y = function(hz){ return T + (520 - hz) / (520 - 230) * (B - T); };
+    [250, 300, 350, 400, 450, 500].forEach(function(hz){
+      svg.appendChild(svgEl("line", { x1: L, y1: y(hz), x2: R, y2: y(hz),
+        stroke: GRID, "stroke-width": 1 }));
+      var t = svgEl("text", { x: L - 6, y: y(hz) + 3.5, fill: TXT2, "font-size": 9,
+        "font-family": "IBM Plex Mono, monospace", "text-anchor": "end" });
+      t.textContent = hz;
+      svg.appendChild(t);
+    });
+    [0, 0.25, 0.5, 0.75, 1].forEach(function(c){
+      svg.appendChild(svgEl("line", { x1: x(c), y1: T, x2: x(c), y2: B,
+        stroke: GRID, "stroke-width": 1 }));
+      var t = svgEl("text", { x: x(c), y: B + 13, fill: TXT2, "font-size": 9,
+        "font-family": "IBM Plex Mono, monospace", "text-anchor": "middle" });
+      t.textContent = (c * 100).toFixed(0) + "%";
+      svg.appendChild(t);
+    });
+    var u = svgEl("text", { x: L - 6, y: T - 2, fill: TXT2, "font-size": 8.5,
+      "font-family": "IBM Plex Mono, monospace", "text-anchor": "end" });
+    u.textContent = "Hz";
+    svg.appendChild(u);
+    var cg = svgEl("text", { x: R, y: B + 13, fill: TXT2, "font-size": 8.5,
+      "font-family": "IBM Plex Mono, monospace", "text-anchor": "end" });
+    cg.textContent = "carga";
+    svg.appendChild(cg);
+    var cores = { 0: "#22d3ee", 5: "#fbbf24", 10: "#f472b6" };
+    [0, 5, 10].forEach(function(expo){
+      var d = "";
+      for (var i = 0; i <= 100; i++){
+        var c = i / 100, ex = expo / 10;
+        var hz = (500 - 250) * (c * (1 - c) * ex + c) + 250;
+        d += (d ? "L" : "M") + x(c).toFixed(1) + " " + y(hz).toFixed(1);
+      }
+      svg.appendChild(svgEl("path", { d: d, fill: "none", stroke: cores[expo],
+        "stroke-width": 2, "stroke-linejoin": "round" }));
+    });
+    legenda(svg, [["expo 0", cores[0]], ["expo 5", cores[5]], ["expo 10", cores[10]]], L + 14, 30);
+  })();
+
+  /* ---- notch dinamico sobre um espectro --------------------------------- */
+  (function(){
+    var svg = document.getElementById("g-track"), W = 520, H = 220, FM = 700;
+    var g = eixos(svg, W, H, FM, 4, -44, [0, -10, -20, -30, -40], [0, 175, 350, 525, 700]);
+    // espectro sintetico: piso de ruido mais tres ressonancias
+    var picos = [[142, 1], [318, .72], [505, .5]];
+    var d = "", semente = 7;
+    function rnd(){ semente = (semente * 1103515245 + 12345) & 0x7fffffff; return semente / 0x7fffffff; }
+    for (var px = 0; px <= g.R - g.L; px += 2){
+      var f = px / (g.R - g.L) * FM, v = 0.035 + rnd() * 0.02;
+      for (var i = 0; i < picos.length; i++){
+        var dfr = (f - picos[i][0]) / 16;
+        v += picos[i][1] / (1 + dfr * dfr);
+      }
+      var db = Math.max(-44, Math.min(4, 20 * Math.log10(v)));
+      d += (d ? "L" : "M") + (g.L + px).toFixed(1) + " " + g.y(db).toFixed(1);
+    }
+    svg.appendChild(svgEl("path", { d: d, fill: "none", stroke: "#4a5a6e", "stroke-width": 1.2 }));
+    var cs = picos.map(function(p){ return biq("notch", p[0], 3); });
+    curva(svg, g, FM, 4, -44, function(w){
+      var m = 1;
+      for (var i = 0; i < cs.length; i++) m *= mag(biqH(cs[i], w));
+      return m;
+    }, "#f472b6", 2.2);
+    picos.forEach(function(p){
+      var t = svgEl("text", { x: g.x(p[0]), y: g.T + 11, fill: "#f472b6", "font-size": 9,
+        "font-family": "IBM Plex Mono, monospace", "text-anchor": "middle" });
+      t.textContent = p[0];
+      svg.appendChild(t);
+    });
+    legenda(svg, [["espectro medido", "#4a5a6e"], ["notches, Q 3", "#f472b6"]], W - 155, 172);
+  })();
+
+  /* ---- laboratorio ------------------------------------------------------ */
+  (function(){
+    var svg = document.getElementById("g-lab"), W = 620, H = 260, FM = 800;
+    var el = {
+      tipo: document.getElementById("l-tipo"), corte: document.getElementById("l-corte"),
+      nf: document.getElementById("l-nf"), nq: document.getElementById("l-nq"),
+      cortev: document.getElementById("l-cortev"), nfv: document.getElementById("l-nfv"),
+      atraso: document.getElementById("l-atraso"), nc: document.getElementById("l-nc"),
+    };
+    function render(){
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var tipo = +el.tipo.value, fc = +el.corte.value, nf = +el.nf.value, nq = +el.nq.value;
+      el.cortev.textContent = fc + " Hz";
+      el.nfv.textContent = nf ? nf + " Hz" : "off";
+
+      var g = eixos(svg, W, H, FM, 5, -49, [0, -10, -20, -30, -40], [0, 200, 400, 600, 800]);
+      var fns = [function(w){ return lpfH(tipo, fc, w); }];
+      var nc = null;
+      if (nf > 0){
+        nc = biq("notch", nf, nq);
+        fns.push(function(w){ return biqH(nc, w); });
+      }
+      // cada bloco em tom apagado, o total em ambar
+      curva(svg, g, FM, 5, -49, function(w){ return mag(lpfH(tipo, fc, w)); }, "#2e6f86", 1.4);
+      if (nc) curva(svg, g, FM, 5, -49, function(w){ return mag(biqH(nc, w)); }, "#7d4463", 1.4);
+      curva(svg, g, FM, 5, -49, function(w){
+        var m = 1;
+        for (var i = 0; i < fns.length; i++) m *= mag(fns[i](w));
+        return m;
+      }, "#fbbf24", 2.4);
+      legenda(svg, [["passa-baixa", "#2e6f86"], ["notch", "#7d4463"], ["cadeia", "#fbbf24"]],
+              W - 145, 30);
+
+      el.atraso.textContent = atrasoMs(fns).toFixed(2).replace(".", ",") + " ms";
+      el.nc.textContent = nc ? qParaCorte(nf, nq).toFixed(1).replace(".", ",") + " Hz" : "—";
+    }
+    ["tipo", "corte", "nf", "nq"].forEach(function(k){
+      el[k].addEventListener("input", render);
+      el[k].addEventListener("change", render);
+    });
+    render();
+  })();
+})();
+</script>
